@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Outfit, JetBrains_Mono } from "next/font/google";
 import { ThemeProvider } from "@/components/ThemeProvider";
+import { Toaster } from "sonner";
 import "./globals.css";
 
 const outfit = Outfit({
@@ -17,9 +18,9 @@ export const metadata: Metadata = {
   title: "PurpleChat Neural",
   description: "High-performance AI assistant",
   icons: {
-    icon: "/icon.svg", // This points to public/icon.svg
-    shortcut: "/icon.svg",
-    apple: "/icon.svg",
+    icon: "/icon.svg?v=1",
+    shortcut: "/icon.svg?v=1",
+    apple: "/icon.svg?v=1",
   },
 };
 
@@ -29,8 +30,11 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
+    // suppressHydrationWarning is THE permanent solution for next-themes
     <html lang="en" suppressHydrationWarning>
-      <body className={`${outfit.variable} ${jetbrains.variable} font-sans antialiased bg-white dark:bg-slate-950`}>
+      <body
+        className={`${outfit.variable} ${jetbrains.variable} font-sans antialiased bg-white dark:bg-slate-950 transition-colors duration-300`}
+      >
         <ThemeProvider
           attribute="class"
           defaultTheme="dark"
@@ -38,6 +42,7 @@ export default function RootLayout({
           disableTransitionOnChange
         >
           {children}
+          <Toaster position="top-center" richColors closeButton />
         </ThemeProvider>
       </body>
     </html>

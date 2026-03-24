@@ -8,6 +8,7 @@ import {
   Trash2,
   Settings,
   Sparkles,
+  Zap,
 } from "lucide-react";
 import { useState } from "react";
 import { motion, AnimatePresence, LayoutGroup } from "framer-motion";
@@ -23,6 +24,8 @@ export default function Sidebar() {
     activeConversationId,
     setActiveConversation,
     deleteConversation,
+    usageCount,
+    maxLimit,
   } = useChatStore();
 
   const sidebarSpring = {
@@ -33,25 +36,20 @@ export default function Sidebar() {
   };
 
   const handleNewChat = () => {
-    // This clears the active ID so the Home page shows <ChatSuggestions />
     setActiveConversation(null);
   };
 
+  const usagePercentage = Math.min((usageCount / maxLimit) * 100, 100);
+
   const LogoIcon = ({ size = 24 }: { size?: number }) => (
-    <svg
-      width={size}
-      height={size}
-      viewBox="0 0 100 100"
-      fill="none"
-      xmlns="http://www.w3.org/2000/svg"
-    >
+    <svg width={size} height={size} viewBox="0 0 100 100" fill="none">
       <path
         d="M30 20H65C73.2843 20 80 26.7157 80 35V55C80 63.2843 73.2843 70 65 70H40L20 85V30C20 24.4772 24.4772 20 30 20Z"
-        fill="white"
+        fill="currentColor"
       />
-      <circle cx="45" cy="40" r="5" fill="#c4b5fd" />
-      <circle cx="65" cy="40" r="5" fill="#c4b5fd" />
-      <circle cx="55" cy="55" r="5" fill="#c4b5fd" />
+      <circle cx="45" cy="40" r="5" fill="#c4b5fd" opacity="0.8" />
+      <circle cx="65" cy="40" r="5" fill="#c4b5fd" opacity="0.8" />
+      <circle cx="55" cy="55" r="5" fill="#c4b5fd" opacity="0.8" />
     </svg>
   );
 
@@ -62,11 +60,10 @@ export default function Sidebar() {
         initial={false}
         animate={{ width: isCollapsed ? 80 : 280 }}
         transition={sidebarSpring}
-        className="h-screen bg-white dark:bg-slate-950 border-r border-slate-200 dark:border-slate-800 flex flex-col relative z-30"
+        className="h-screen bg-white dark:bg-slate-950 border-r border-slate-200 dark:border-slate-800 flex flex-col relative z-30 transition-colors"
       >
-        {/* LOGO SECTION */}
         <div className="p-6 flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-violet-600 flex items-center justify-center shadow-lg shrink-0">
+          <div className="w-10 h-10 rounded-xl bg-violet-600 text-white flex items-center justify-center shadow-lg shrink-0">
             <LogoIcon size={24} />
           </div>
           {!isCollapsed && (
@@ -80,7 +77,6 @@ export default function Sidebar() {
           )}
         </div>
 
-        {/* COLLAPSE TOGGLE */}
         <button
           onClick={() => setIsCollapsed(!isCollapsed)}
           className="absolute -right-3 top-20 w-6 h-6 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-full flex items-center justify-center shadow-md z-50 hover:scale-110 transition-transform"
@@ -90,7 +86,6 @@ export default function Sidebar() {
           </motion.div>
         </button>
 
-        {/* NEW CHAT BUTTON */}
         <div className="px-4 mb-6">
           <motion.button
             layout
@@ -103,18 +98,16 @@ export default function Sidebar() {
             )}
           >
             <Plus size={22} />
-            {!isCollapsed && <span>New Chat</span>}
+            {!isCollapsed && <span>New Analysis</span>}
           </motion.button>
         </div>
 
-        {/* RECENT CHATS LIST */}
         <div className="flex-1 overflow-y-auto px-3 space-y-1 custom-scrollbar">
           {!isCollapsed && conversations.length > 0 && (
             <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest px-4 py-2">
-              Recent Conversations
+              History & Docs
             </p>
           )}
-
           <AnimatePresence mode="popLayout">
             {conversations.map((conv) => (
               <motion.div
@@ -137,11 +130,10 @@ export default function Sidebar() {
                   <MessageSquare size={18} className="shrink-0" />
                   {!isCollapsed && (
                     <span className="text-sm font-medium truncate pr-6 text-left">
-                      {conv.title || "Untitled Chat"}
+                      {conv.title || "Untitled Analysis"}
                     </span>
                   )}
                 </button>
-
                 {!isCollapsed && (
                   <button
                     onClick={(e) => {
@@ -158,8 +150,29 @@ export default function Sidebar() {
           </AnimatePresence>
         </div>
 
-        {/* BOTTOM USER PROFILE / SETTINGS */}
-        <div className="p-4 border-t border-slate-100 dark:border-slate-900 mt-auto">
+        <div className="p-4 space-y-4 border-t border-slate-100 dark:border-slate-900 mt-auto bg-slate-50/50 dark:bg-slate-950/50">
+          {!isCollapsed && (
+            <div className="px-2">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tight flex items-center gap-1">
+                  <Zap size={10} className="text-amber-500" />
+                  Intelligence
+                </span>
+                <span className="text-[10px] font-bold text-slate-500">
+                  {usageCount}/{maxLimit}
+                </span>
+              </div>
+              <div className="w-full h-1.5 bg-slate-200 dark:bg-slate-800 rounded-full overflow-hidden">
+                <motion.div
+                  animate={{ width: `${usagePercentage}%` }}
+                  className={cn(
+                    "h-full rounded-full transition-colors",
+                    usagePercentage > 80 ? "bg-red-500" : "bg-violet-600",
+                  )}
+                />
+              </div>
+            </div>
+          )}
           <button
             className={cn(
               "flex items-center gap-3 w-full p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-900 transition-colors",
@@ -174,14 +187,13 @@ export default function Sidebar() {
                 <p className="text-xs font-bold dark:text-white truncate">
                   Settings
                 </p>
-                <p className="text-[10px] text-slate-500">v1.0.4 Premium</p>
+                <p className="text-[10px] text-slate-500">Neural Engine v2.0</p>
               </div>
             )}
           </button>
         </div>
       </motion.aside>
 
-      {/* DELETE MODAL */}
       <AnimatePresence>
         {deleteId && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
@@ -202,10 +214,10 @@ export default function Sidebar() {
                 <Trash2 size={24} className="text-red-500" />
               </div>
               <h3 className="text-lg font-bold text-center dark:text-white mb-2">
-                Delete Conversation?
+                Delete Chat Memory?
               </h3>
               <p className="text-sm text-slate-500 text-center mb-6">
-                This action cannot be undone.
+                This will remove all document analysis and history.
               </p>
               <div className="flex gap-3">
                 <button
@@ -228,23 +240,6 @@ export default function Sidebar() {
               </div>
             </motion.div>
           </div>
-        )}
-      </AnimatePresence>
-
-      {/* TOAST NOTIFICATION */}
-      <AnimatePresence>
-        {showToast && (
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 20 }}
-            className="fixed bottom-8 left-1/2 -translate-x-1/2 z-[110] bg-slate-900 text-white px-6 py-3 rounded-full flex items-center gap-3 shadow-2xl"
-          >
-            <Sparkles size={16} className="text-violet-400" />
-            <span className="text-xs font-bold">
-              Memory successfully cleared
-            </span>
-          </motion.div>
         )}
       </AnimatePresence>
     </LayoutGroup>

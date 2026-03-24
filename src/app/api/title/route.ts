@@ -1,38 +1,45 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import OpenAI from "openai";
 import { NextResponse } from "next/server";
-
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
 
 export async function POST(req: Request) {
   try {
-    const { messages = [] } = await req.json(); // Fallback to empty array
-
-    if (!process.env.GEMINI_API_KEY) {
-      return NextResponse.json({ error: "API Key missing" }, { status: 500 });
+    const { messages = [] } = await req.json();
+    
+    // If no messages, just return a default
+    if (!messages || messages.length === 0) {
+      return NextResponse.json({ title: "New Chat" });
     }
 
-    // Use Lite model for higher free-tier limits
-    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash-lite" });
+    // Safety check for API key
+    if (!process.env.GROQ_API_KEY) {
+      console.error("❌ Title Error: GROQ_API_KEY is missing");
+      return NextResponse.json({ title: "PurpleChat" });
+    }
 
-    // Ensure messages is an array before slicing to prevent the "slice of undefined" error
-    const history = Array.isArray(messages) && messages.length > 0 
-      ? messages.slice(0, -1).map((msg: any) => ({
-          role: msg.role === "user" ? "user" : "model",
-          parts: [{ text: msg.content || "" }],
-        }))
-      : [];
+    const firstMessage = messages[0].content.substring(0, 50);
+    const prompt = `Create a short 2-word title for this chat based on this message: "${firstMessage}". Return only the title text, no quotes.`;
 
-    const chat = model.startChat({ history });
-    
-    // Request a short title based on the very first message
-    const firstMsg = messages[0]?.content || "New Chat";
-    const result = await chat.sendMessage(`Generate a 2-3 word title for a chat that starts with: "${firstMsg}". Return ONLY the title text.`);
-    const response = await result.response;
-    
-    return NextResponse.json({ title: response.text().trim() });
+    const groq = new OpenAI({ 
+      apiKey: process.env.GROQ_API_KEY, 
+      baseURL: "https://api.groq.com/openai/v1" 
+    });
+
+    const res = await groq.chat.completions.create({
+      messages: [{ role: "user", content: prompt }],
+      model: "llama-3.1-8b-instant", // Using the 8b model because it's lightning fast for titles
+      max_tokens: 10,
+      temperature: 0.7,
+    });
+
+    const title = res.choices[0].message.content?.replace(/["*.]/g, "").trim() || "New Chat";
+
+    console.log(`✅ Title Generated: ${title}`);
+
+    return NextResponse.json({ title });
 
   } catch (error: any) {
-    console.error("Title API Error:", error);
-    return NextResponse.json({ title: "New Chat" }, { status: 200 }); // Fail gracefully
+    console.error("❌ Title Generation Failed:", error.message);
+    // Fallback so the app doesn't crash if the title fails
+    return NextResponse.json({ title: "New Chat" });
   }
 }

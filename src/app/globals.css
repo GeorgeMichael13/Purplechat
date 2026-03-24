@@ -26,7 +26,9 @@
     color: hsl(var(--foreground));
     text-rendering: optimizeLegibility;
     -webkit-font-smoothing: antialiased;
-    transition: background-color 0.3s ease, color 0.3s ease;
+    transition:
+      background-color 0.3s ease,
+      color 0.3s ease;
   }
 }
 
@@ -46,20 +48,27 @@
 
 /* --- Combined Utilities --- */
 @layer utilities {
-  .animate-p-node-1 { animation: p-pulse 3s infinite ease-in-out; }
-  .animate-p-node-2 { animation: p-pulse 3s infinite ease-in-out 0.5s; }
-  .animate-p-node-3 { animation: p-pulse 3s infinite ease-in-out 1s; }
+  .animate-p-node-1 {
+    animation: p-pulse 3s infinite ease-in-out;
+  }
+  .animate-p-node-2 {
+    animation: p-pulse 3s infinite ease-in-out 0.5s;
+  }
+  .animate-p-node-3 {
+    animation: p-pulse 3s infinite ease-in-out 1s;
+  }
 
   @keyframes p-pulse {
-    0%, 100% { 
-      opacity: 1; 
-      transform: scale(1); 
-      filter: brightness(1); 
+    0%,
+    100% {
+      opacity: 1;
+      transform: scale(1);
+      filter: brightness(1);
     }
-    50% { 
-      opacity: 0.4; 
-      transform: scale(0.7); 
-      filter: brightness(1.6); 
+    50% {
+      opacity: 0.4;
+      transform: scale(0.7);
+      filter: brightness(1.6);
     }
   }
 
@@ -72,5 +81,21 @@
   }
   .custom-scrollbar::-webkit-scrollbar-thumb {
     @apply bg-violet-500/20 rounded-full hover:bg-violet-500/40 transition-colors;
+  }
+}
+@media print {
+  /* Hide everything except the chat messages */
+  aside,
+  header,
+  .chat-input-container,
+  button {
+    display: none !important;
+  }
+  .custom-scrollbar {
+    overflow: visible !important;
+  }
+  body {
+    background: white !important;
+    color: black !important;
   }
 }

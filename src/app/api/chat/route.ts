@@ -1,41 +1,79 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import OpenAI from "openai";
 import { NextResponse } from "next/server";
-
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
 
 export async function POST(req: Request) {
   try {
-    const { messages } = await req.json();
-    
-    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash-lite" });
+    const { messages = [] } = await req.json();
 
-    const chat = model.startChat({
-      history: messages.slice(0, -1).map((m: any) => ({
-        role: m.role === "user" ? "user" : "model",
-        parts: [{ text: m.content }],
-      })),
+    if (!process.env.GROQ_API_KEY) {
+      return NextResponse.json(
+        { error: "CONFIG_ERROR", message: "Groq API key missing." },
+        { status: 500 }
+      );
+    }
+
+    let fileContext = "";
+    const lastMessage = messages[messages.length - 1];
+
+    // --- FILE INTELLIGENCE LOGIC ---
+    if (lastMessage.attachments && lastMessage.attachments.length > 0) {
+      let parsePdf;
+      try {
+        // Robust dynamic import for CommonJS compatibility
+        const pdfModule = await import("pdf-parse");
+        parsePdf = pdfModule.default || pdfModule;
+      } catch (importErr) {
+        console.error("❌ Failed to load pdf-parse:", importErr);
+      }
+
+      for (const file of lastMessage.attachments) {
+        if (file.type === "application/pdf" && file.base64 && parsePdf) {
+          try {
+            const buffer = Buffer.from(file.base64, "base64");
+            const data = await parsePdf(buffer);
+            fileContext += `\n[File: ${file.name}]\n${data.text}\n`;
+          } catch (pdfErr) {
+            console.error("PDF Parsing Error:", pdfErr);
+          }
+        } else if (file.extractedText) {
+          fileContext += `\n[File: ${file.name}]\n${file.extractedText}\n`;
+        }
+      }
+    }
+
+    // Prepare messages for Groq
+    const processedMessages = messages.map((m: any, index: number) => {
+      const isLast = index === messages.length - 1;
+      let content = m.content;
+      if (isLast && fileContext) {
+        content = `CONTEXT FROM UPLOADED FILES:\n${fileContext}\n\nUSER QUESTION: ${m.content}`;
+      }
+      return {
+        role: m.role === "model" ? "assistant" : m.role,
+        content: content
+      };
     });
 
-    const lastMessage = messages[messages.length - 1].content;
+    const groq = new OpenAI({ 
+      apiKey: process.env.GROQ_API_KEY, 
+      baseURL: "https://api.groq.com/openai/v1" 
+    });
 
-    // Timeout logic to prevent the request from hanging
-    const result = await Promise.race([
-      chat.sendMessage(lastMessage),
-      new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout")), 15000))
-    ]) as any;
+    const response = await groq.chat.completions.create({
+      messages: processedMessages,
+      model: "llama-3.3-70b-versatile",
+    });
 
-    const response = await result.response;
-    const text = response.text();
+    return NextResponse.json({ 
+      text: response.choices[0].message.content, 
+      provider: "Groq" 
+    });
 
-    return NextResponse.json({ text });
   } catch (error: any) {
-    // We log the real error for you in the terminal
-    console.error("Gemini API Error:", error.message);
-    
-    // We send a generic 500 status so the frontend can trigger a friendly message
+    console.error("❌ API Error:", error.message);
     return NextResponse.json(
-      { error: "Internal Server Error" },
-      { status: 500 }
+      { error: "SERVER_ERROR", message: error.message },
+      { status: 503 }
     );
   }
 }

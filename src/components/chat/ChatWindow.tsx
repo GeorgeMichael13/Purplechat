@@ -1,75 +1,236 @@
 "use client";
 
-import { useChatStore } from "@/store/chatStore";
-import { User, Trash2, Sun, Moon, Copy, Pencil, Check } from "lucide-react";
-import { useState, useRef, useEffect } from "react";
+import { useChatStore, ChatMode } from "@/store/chatStore";
+import {
+  User,
+  Trash2,
+  Sun,
+  Moon,
+  Code2,
+  GraduationCap,
+  PenTool,
+  CheckCircle2,
+  MessageSquare,
+  ChevronDown,
+  Terminal,
+  FileText,
+  BookOpen,
+  Layout,
+  Volume2,
+  VolumeX,
+  Radio,
+  Edit2,
+  Copy,
+  Check,
+  X,
+  Star,
+  Download,
+  ClipboardCheck,
+} from "lucide-react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { useTheme } from "next-themes";
+import { toast } from "sonner";
 import ChatInput from "./ChatInput";
 
-const LogoIcon = ({ size = 24 }) => (
-  <svg width={size} height={size} viewBox="0 0 100 100" fill="none">
-    <path d="M30 20H65C73.2843 20 80 26.7157 80 35V55C80 63.2843 73.2843 70 65 70H40L20 85V30C20 24.4772 24.4772 20 30 20Z" fill="currentColor"/>
-    <circle cx="45" cy="40" r="5" fill="#c4b5fd" opacity="0.8" />
-    <circle cx="65" cy="40" r="5" fill="#c4b5fd" opacity="0.8" />
-    <circle cx="55" cy="55" r="5" fill="#c4b5fd" opacity="0.8" />
-  </svg>
-);
+const MODES = [
+  {
+    id: "general" as ChatMode,
+    label: "General",
+    icon: MessageSquare,
+    color: "text-violet-500",
+    bg: "bg-violet-600",
+  },
+  {
+    id: "developer" as ChatMode,
+    label: "Developer",
+    icon: Code2,
+    color: "text-blue-500",
+    bg: "bg-blue-600",
+  },
+  {
+    id: "student" as ChatMode,
+    label: "Student",
+    icon: GraduationCap,
+    color: "text-emerald-500",
+    bg: "bg-emerald-600",
+  },
+  {
+    id: "writer" as ChatMode,
+    label: "Writer",
+    icon: PenTool,
+    color: "text-orange-500",
+    bg: "bg-orange-600",
+  },
+  {
+    id: "productivity" as ChatMode,
+    label: "Productivity",
+    icon: CheckCircle2,
+    color: "text-pink-500",
+    bg: "bg-pink-600",
+  },
+];
+
+const SUGGESTIONS = [
+  {
+    title: "Summarize uploaded PDF",
+    desc: "Extract key insights instantly.",
+    icon: <FileText size={20} />,
+    color: "text-blue-500",
+    bgColor: "bg-blue-500/10",
+  },
+  {
+    title: "Explain like I'm a student",
+    desc: "Break down complex notes.",
+    icon: <BookOpen size={20} />,
+    color: "text-emerald-500",
+    bgColor: "bg-emerald-500/10",
+  },
+  {
+    title: "Debug and optimize code",
+    desc: "Find errors and improve logic.",
+    icon: <Terminal size={20} />,
+    color: "text-violet-500",
+    bgColor: "bg-violet-500/10",
+  },
+  {
+    title: "Draft a report from data",
+    desc: "Transform raw info into a document.",
+    icon: <Layout size={20} />,
+    color: "text-orange-500",
+    bgColor: "bg-orange-500/10",
+  },
+];
 
 export default function ChatWindow() {
   const { setTheme, resolvedTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
-  const { activeConversationId, conversations, addMessage, clearMessages, createNewConversation } = useChatStore();
+  const [showModeMenu, setShowModeMenu] = useState(false);
+  const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
+  const [editBuffer, setEditBuffer] = useState("");
+  const [isSpeaking, setIsSpeaking] = useState(false);
+  const [ttsEnabled, setTtsEnabled] = useState(true);
+  const synth = typeof window !== "undefined" ? window.speechSynthesis : null;
+
+  const {
+    activeConversationId,
+    conversations,
+    addMessage,
+    clearMessages,
+    createNewConversation,
+    mode,
+    setMode,
+    usageCount,
+    maxLimit,
+    provider,
+    togglePin,
+  } = useChatStore();
+
+  const promptsLeft = maxLimit - usageCount;
   const [input, setInput] = useState("");
   const [isTyping, setIsTyping] = useState(false);
-  const [copiedId, setCopiedId] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => setMounted(true), []);
+
   const activeConv = conversations.find((c) => c.id === activeConversationId);
+  const hasMessages = activeConv && activeConv.messages.length > 0;
+  const currentMode = MODES.find((m) => m.id === mode) || MODES[0];
 
   useEffect(() => {
     if (scrollRef.current) {
-      scrollRef.current.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
+      scrollRef.current.scrollTo({
+        top: scrollRef.current.scrollHeight,
+        behavior: "smooth",
+      });
     }
   }, [activeConv?.messages, isTyping]);
 
-  const handleSend = async (content?: string) => {
+  // --- NEW FEATURE: DOWNLOAD PDF ---
+  const handleDownloadPDF = () => {
+    if (!hasMessages) return;
+    toast.info("Preparing PDF...");
+    window.print();
+  };
+
+  // --- NEW FEATURE: COPY FORMATTED TEXT ---
+  const copyFormattedText = async (messageId: string) => {
+    const el = document.getElementById(`msg-${messageId}`);
+    if (!el) return;
+    try {
+      const type = "text/html";
+      const blob = new Blob([el.innerHTML], { type });
+      const data = [new ClipboardItem({ [type]: blob })];
+      await navigator.clipboard.write(data);
+      toast.success("Copied with formatting!");
+    } catch (err) {
+      navigator.clipboard.writeText(el.innerText);
+      toast.success("Copied as plain text");
+    }
+  };
+
+  const speakText = useCallback(
+    (text: string) => {
+      if (!ttsEnabled || !synth) return;
+      synth.cancel();
+      const utterance = new SpeechSynthesisUtterance(
+        text.replace(/[#*`]/g, ""),
+      );
+      utterance.rate = 1.05;
+      utterance.onstart = () => setIsSpeaking(true);
+      utterance.onend = () => setIsSpeaking(false);
+      synth.speak(utterance);
+    },
+    [ttsEnabled, synth],
+  );
+
+  const handleSend = async (content?: string, attachments?: any[]) => {
     const text = content || input;
-    if (!text.trim() || isTyping) return;
-    
+    if (!text.trim() && (!attachments || attachments.length === 0)) return;
+
+    if (promptsLeft <= 0) {
+      toast.error("Limit reached", {
+        description: "You have used all your prompts.",
+      });
+      return;
+    }
+
     let currentId = activeConversationId || createNewConversation();
     setInput("");
-    addMessage(currentId, "user", text);
     setIsTyping(true);
+
+    let finalPrompt = text;
+    if (attachments && attachments.length > 0) {
+      const file = attachments[0];
+      finalPrompt = `\n[ATTACHED FILE CONTENT]\nFile Name: ${file.name}\n---\n${file.extractedText || "File loaded successfully."}\n---\nUser Question: ${text}`;
+    }
+
+    await addMessage(currentId, "user", text, attachments);
 
     try {
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ 
-          messages: [...(activeConv?.messages || []), { role: "user", content: text }] 
+        body: JSON.stringify({
+          mode,
+          provider,
+          messages: [
+            ...(activeConv?.messages || []),
+            { role: "user", content: finalPrompt },
+          ],
         }),
       });
 
-      if (!res.ok) {
-        // Human-friendly error for server/limit issues
-        throw new Error("I'm having a little trouble connecting. Could you try sending that again?");
-      }
-      
       const data = await res.json();
-      addMessage(currentId, "assistant", data.text || "I'm not sure how to respond to that. Could you rephrase?");
-    } catch (err: any) {
-      // Friendly message for network failure/offline
-      const userFriendlyMessage = err.message.includes("fetch") 
-        ? "Connection lost. Please check your internet and try again." 
-        : err.message;
+      if (!res.ok) throw new Error(data.message || "Engine Error");
 
-      addMessage(currentId, "assistant", userFriendlyMessage);
-      console.error("System Log:", err);
+      await addMessage(currentId, "assistant", data.text);
+      if (ttsEnabled) speakText(data.text);
+    } catch (err: any) {
+      toast.error("Purple Engine Error", { description: err.message });
     } finally {
       setIsTyping(false);
     }
@@ -78,102 +239,295 @@ export default function ChatWindow() {
   if (!mounted) return null;
 
   return (
-    <div className="flex-1 flex flex-col h-screen bg-white dark:bg-slate-950 relative overflow-hidden transition-colors">
-      <header className="mx-4 mt-3 p-3 rounded-2xl border border-slate-100 dark:border-white/5 bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl flex items-center justify-between z-20 shadow-sm">
+    <div className="flex-1 flex flex-col h-screen bg-white dark:bg-[#020617] relative overflow-hidden transition-colors">
+      <header className="mx-4 mt-3 p-2 rounded-2xl border border-slate-100 dark:border-white/5 bg-white/80 dark:bg-slate-900/50 backdrop-blur-xl flex items-center justify-between z-30 shadow-sm print:hidden">
         <div className="flex items-center gap-2 px-1">
-          <div className="w-7 h-7 rounded-lg bg-violet-600 text-white flex items-center justify-center shadow-md">
-            <LogoIcon size={16} />
+          <div
+            className={cn(
+              "w-8 h-8 rounded-xl text-white flex items-center justify-center shadow-lg transition-all",
+              currentMode.bg,
+            )}
+          >
+            <currentMode.icon size={18} />
           </div>
-          <h2 className="font-bold text-sm text-slate-800 dark:text-slate-100 truncate max-w-[150px]">
-            {activeConv?.title || "PurpleChat"}
-          </h2>
+          <div className="relative">
+            <button
+              onClick={() => setShowModeMenu(!showModeMenu)}
+              className="flex items-center gap-2 hover:bg-slate-100 dark:hover:bg-white/5 px-2 py-1 rounded-lg transition-all text-sm font-bold dark:text-slate-100"
+            >
+              {currentMode.label} Engine{" "}
+              <ChevronDown
+                size={14}
+                className={cn(
+                  "transition-transform",
+                  showModeMenu && "rotate-180",
+                )}
+              />
+            </button>
+            <AnimatePresence>
+              {showModeMenu && (
+                <motion.div
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: 10 }}
+                  className="absolute top-full left-0 mt-2 w-48 bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 rounded-2xl shadow-2xl p-2 z-50"
+                >
+                  {MODES.map((m) => (
+                    <button
+                      key={m.id}
+                      onClick={() => {
+                        setMode(m.id);
+                        setShowModeMenu(false);
+                      }}
+                      className={cn(
+                        "w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-colors",
+                        mode === m.id
+                          ? "bg-violet-50 dark:bg-violet-500/10 text-violet-600"
+                          : "hover:bg-slate-50 dark:hover:bg-white/5",
+                      )}
+                    >
+                      <m.icon size={16} className={m.color} />
+                      <span className="font-medium dark:text-slate-200">
+                        {m.label}
+                      </span>
+                    </button>
+                  ))}
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
         </div>
         <div className="flex items-center gap-1">
-          <button onClick={() => setTheme(resolvedTheme === "dark" ? "light" : "dark")} className="p-2 rounded-lg text-slate-400 hover:bg-violet-500/10 transition-colors">
+          {/* NEW FEATURE: SAVE/PIN BUTTON */}
+          <button
+            onClick={() =>
+              activeConversationId && togglePin(activeConversationId)
+            }
+            className={cn(
+              "p-2 rounded-lg transition-all",
+              activeConv?.isPinned ? "text-amber-500" : "text-slate-400",
+            )}
+            title="Save Chat"
+          >
+            <Star
+              size={16}
+              fill={activeConv?.isPinned ? "currentColor" : "none"}
+            />
+          </button>
+
+          {/* NEW FEATURE: DOWNLOAD PDF BUTTON */}
+          <button
+            onClick={handleDownloadPDF}
+            className="p-2 rounded-lg text-slate-400 hover:text-violet-500"
+            title="Download PDF"
+          >
+            <Download size={16} />
+          </button>
+
+          <button
+            onClick={() => setTtsEnabled(!ttsEnabled)}
+            className={cn(
+              "p-2 rounded-lg transition-all",
+              ttsEnabled ? "text-violet-500" : "text-slate-400",
+            )}
+          >
+            {ttsEnabled ? <Volume2 size={16} /> : <VolumeX size={16} />}
+          </button>
+          <button
+            onClick={() =>
+              setTheme(resolvedTheme === "dark" ? "light" : "dark")
+            }
+            className="p-2 rounded-lg text-slate-400 hover:bg-slate-100 dark:hover:bg-white/5"
+          >
             {resolvedTheme === "dark" ? <Sun size={16} /> : <Moon size={16} />}
           </button>
-          <button onClick={() => confirm("Clear chat?") && clearMessages(activeConversationId!)} className="p-2 text-slate-400 hover:text-red-500 transition-colors">
+          <button
+            onClick={() => clearMessages(activeConversationId!)}
+            className="p-2 text-slate-400 hover:text-red-500"
+          >
             <Trash2 size={16} />
           </button>
         </div>
       </header>
 
-      <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-6 space-y-6 custom-scrollbar relative z-10">
-        <AnimatePresence mode="popLayout">
-          {activeConv?.messages.map((msg) => (
+      <div
+        ref={scrollRef}
+        className="flex-1 overflow-y-auto px-4 py-6 custom-scrollbar relative z-10"
+      >
+        <AnimatePresence mode="wait">
+          {!hasMessages ? (
             <motion.div
-              key={msg.id}
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              className={cn(
-                "flex items-start gap-3 w-full group",
-                msg.role === "user" ? "flex-row-reverse" : "flex-row"
-              )}
+              key="welcome"
+              className="h-full flex flex-col items-center justify-center max-w-4xl mx-auto text-center py-10 print:hidden"
             >
-              <div className={cn(
-                "w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5 shadow-sm",
-                msg.role === "assistant" ? "bg-violet-600 text-white" : "bg-slate-100 dark:bg-slate-800 text-slate-500"
-              )}>
-                {msg.role === "assistant" ? <LogoIcon size={14} /> : <User size={14} />}
+              <div
+                className={cn(
+                  "w-20 h-20 rounded-[2.5rem] text-white flex items-center justify-center mx-auto shadow-2xl mb-6",
+                  currentMode.bg,
+                )}
+              >
+                <currentMode.icon size={40} />
               </div>
-              
-              <div className={cn(
-                "flex flex-col gap-1.5 max-w-[85%] md:max-w-[75%]",
-                msg.role === "user" ? "items-end" : "items-start"
-              )}>
-                <div className={cn(
-                  "px-4 py-2.5 rounded-[1.2rem] text-[13.5px] md:text-[14px] leading-relaxed shadow-sm w-fit transition-all",
-                  msg.role === "user"
-                    ? "bg-violet-600 text-white rounded-tr-none ml-auto"
-                    : "bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 text-slate-800 dark:text-slate-200 rounded-tl-none"
-                )}>
-                  <ReactMarkdown 
-                    remarkPlugins={[remarkGfm]}
-                    components={{
-                      script: () => null, 
-                      p: ({children}) => <span className="block">{children}</span>
-                    }}
+              <h1 className="text-5xl font-black text-slate-900 dark:text-white tracking-tighter mb-4">
+                PurpleChat
+              </h1>
+              <p className="text-slate-500 dark:text-slate-400 text-xl font-medium mb-12 italic">
+                "Engineered for Neural Accuracy"
+              </p>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 w-full px-4">
+                {SUGGESTIONS.map((s, i) => (
+                  <motion.button
+                    key={s.title}
+                    initial={{ opacity: 0, y: 15 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.2 + i * 0.1 }}
+                    onClick={() => handleSend(s.title)}
+                    className="group p-5 rounded-3xl border border-slate-100 dark:border-white/5 bg-white dark:bg-slate-900/40 hover:border-violet-500/40 text-left shadow-sm"
                   >
-                    {msg.content}
-                  </ReactMarkdown>
-                </div>
-
-                <div className={cn(
-                  "flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity px-1",
-                  msg.role === "user" ? "flex-row-reverse" : "flex-row"
-                )}>
-                  <button 
-                    onClick={() => { navigator.clipboard.writeText(msg.content); setCopiedId(msg.id); setTimeout(()=>setCopiedId(null), 2000); }} 
-                    className="p-1 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400"
-                  >
-                    {copiedId === msg.id ? <Check size={12} className="text-green-500" /> : <Copy size={12} />}
-                  </button>
-                  {msg.role === "user" && (
-                    <button onClick={() => setInput(msg.content)} className="p-1 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400">
-                      <Pencil size={12} />
-                    </button>
-                  )}
-                </div>
-              </div>
-            </motion.div>
-          ))}
-        </AnimatePresence>
-
-        {isTyping && (
-          <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-lg bg-violet-600 text-white flex items-center justify-center animate-pulse"><LogoIcon size={14} /></div>
-            <div className="bg-slate-100 dark:bg-slate-900 px-3 py-2 rounded-xl rounded-tl-none border border-slate-200 dark:border-slate-800 w-fit">
-              <div className="flex gap-1">
-                {[0, 0.1, 0.2].map((d) => (
-                  <motion.span key={d} animate={{ scale: [1, 1.4, 1] }} transition={{ repeat: Infinity, duration: 0.8, delay: d }} className="w-1 h-1 bg-violet-500 rounded-full" />
+                    <div className="flex items-start gap-4">
+                      <div
+                        className={cn("p-3 rounded-2xl", s.bgColor, s.color)}
+                      >
+                        {s.icon}
+                      </div>
+                      <div>
+                        <h3 className="font-bold text-[16px] dark:text-slate-100">
+                          {s.title}
+                        </h3>
+                        <p className="text-xs text-slate-500 mt-1">{s.desc}</p>
+                      </div>
+                    </div>
+                  </motion.button>
                 ))}
               </div>
+            </motion.div>
+          ) : (
+            <div className="space-y-8 max-w-4xl mx-auto">
+              {activeConv.messages.map((msg) => (
+                <motion.div
+                  key={msg.id}
+                  className={cn(
+                    "flex items-start gap-4 w-full group",
+                    msg.role === "user" ? "flex-row-reverse" : "flex-row",
+                  )}
+                >
+                  <div
+                    className={cn(
+                      "w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 mt-1 shadow-sm print:hidden",
+                      msg.role === "assistant"
+                        ? currentMode.bg + " text-white"
+                        : "bg-slate-100 dark:bg-slate-800 text-slate-500",
+                    )}
+                  >
+                    {msg.role === "assistant" && isSpeaking ? (
+                      <Radio size={16} className="animate-pulse" />
+                    ) : msg.role === "assistant" ? (
+                      <currentMode.icon size={16} />
+                    ) : (
+                      <User size={16} />
+                    )}
+                  </div>
+                  <div
+                    className={cn(
+                      "flex flex-col gap-3 max-w-[85%] relative",
+                      msg.role === "user" ? "items-end" : "items-start",
+                    )}
+                  >
+                    <div
+                      id={`msg-${msg.id}`}
+                      className={cn(
+                        "px-6 py-4 rounded-3xl text-[14.5px] border shadow-sm transition-all",
+                        msg.role === "user"
+                          ? "bg-violet-600 border-violet-500 text-white rounded-tr-none"
+                          : "bg-white dark:bg-slate-900 border-slate-100 dark:border-white/5 text-slate-800 dark:text-slate-200 rounded-tl-none",
+                      )}
+                    >
+                      {editingMessageId === msg.id ? (
+                        <div className="flex flex-col gap-2 min-w-[200px]">
+                          <textarea
+                            value={editBuffer}
+                            onChange={(e) => setEditBuffer(e.target.value)}
+                            className="w-full bg-transparent border-none focus:ring-0 text-sm resize-none outline-none"
+                            autoFocus
+                            rows={3}
+                          />
+                          <div className="flex justify-end gap-2 border-t border-white/20 pt-2">
+                            <button
+                              onClick={() => setEditingMessageId(null)}
+                              className="p-1 hover:text-red-300 transition-colors"
+                            >
+                              <X size={14} />
+                            </button>
+                            <button
+                              onClick={() => {
+                                activeConv.messages = activeConv.messages.slice(
+                                  0,
+                                  activeConv.messages.findIndex(
+                                    (m) => m.id === msg.id,
+                                  ),
+                                );
+                                setEditingMessageId(null);
+                                handleSend(editBuffer);
+                              }}
+                              className="p-1 hover:text-emerald-300 transition-colors"
+                            >
+                              <Check size={14} />
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                          {msg.content}
+                        </ReactMarkdown>
+                      )}
+                    </div>
+                    {!editingMessageId && (
+                      <div
+                        className={cn(
+                          "flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity absolute -top-1 print:hidden",
+                          msg.role === "user"
+                            ? "right-full mr-2"
+                            : "left-full ml-2",
+                        )}
+                      >
+                        {/* NEW FEATURE: FORMATTED COPY BUTTON */}
+                        <button
+                          onClick={() => copyFormattedText(msg.id)}
+                          className="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-500 hover:text-violet-500 shadow-sm border border-slate-200 dark:border-white/10 transition-all"
+                          title="Copy Formatted"
+                        >
+                          <ClipboardCheck size={12} />
+                        </button>
+                        <button
+                          onClick={() => {
+                            setEditingMessageId(msg.id);
+                            setEditBuffer(msg.content);
+                          }}
+                          className={cn(
+                            "p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-500 hover:text-violet-500 shadow-sm border border-slate-200 dark:border-white/10 transition-all",
+                            msg.role !== "user" && "hidden",
+                          )}
+                        >
+                          <Edit2 size={12} />
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </motion.div>
+              ))}
             </div>
-          </div>
-        )}
+          )}
+        </AnimatePresence>
       </div>
 
-      <ChatInput value={input} onChange={setInput} onSubmit={handleSend} disabled={isTyping} />
+      <div className="print:hidden">
+        <ChatInput
+          value={input}
+          onChange={setInput}
+          onSubmit={handleSend}
+          disabled={isTyping}
+        />
+      </div>
     </div>
   );
 }

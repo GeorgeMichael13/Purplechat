@@ -1,11 +1,6 @@
 <svg width="100" height="100" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
   <path d="M30 20H65C73.2843 20 80 26.7157 80 35V55C80 63.2843 73.2843 70 65 70H40L20 85V30C20 24.4772 24.4772 20 30 20Z" fill="#7c3aed"/>
-  
-  <circle cx="45" cy="40" r="5" fill="#c4b5fd" className="animate-p-node-1" />
-  <circle cx="65" cy="40" r="5" fill="#c4b5fd" className="animate-p-node-2" />
-  <circle cx="55" cy="55" r="5" fill="#c4b5fd" className="animate-p-node-3" />
-  
-  <line x1="45" y1="40" x2="65" y2="40" stroke="#c4b5fd" stroke-width="2" opacity="0.4"/>
-  <line x1="45" y1="40" x2="55" y2="55" stroke="#c4b5fd" stroke-width="2" opacity="0.4"/>
-  <line x1="65" y1="40" x2="55" y2="55" stroke="#c4b5fd" stroke-width="2" opacity="0.4"/>
+  <circle cx="45" cy="40" r="5" fill="#c4b5fd" opacity="0.8" />
+  <circle cx="65" cy="40" r="5" fill="#c4b5fd" opacity="0.8" />
+  <circle cx="55" cy="55" r="5" fill="#c4b5fd" opacity="0.8" />
 </svg>
