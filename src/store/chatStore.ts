@@ -18,7 +18,7 @@ interface Message {
   role: "user" | "assistant";
   content: string;
   timestamp: number;
-  attachments?: any[]; // Added to store file metadata
+  attachments?: any[];
 }
 
 interface Conversation {
@@ -31,6 +31,14 @@ interface Conversation {
   isPinned?: boolean;
 }
 
+// NEW: Analytics structure for the dashboard
+interface UsageStats {
+  totalPrompts: number;
+  promptsByMode: Record<ChatMode, number>;
+  remainingQuota: number;
+  usagePercentage: number;
+}
+
 interface ChatState {
   users: UserProfile[];
   currentUser: UserProfile | null;
@@ -41,6 +49,7 @@ interface ChatState {
   usageCount: number;
   maxLimit: number;
   
+  // Actions
   signup: (data: Omit<UserProfile, "id" | "joinedAt" | "role">) => void;
   login: (email: string) => boolean;
   logout: () => void;
@@ -54,6 +63,9 @@ interface ChatState {
   deleteConversation: (id: string) => void;
   clearMessages: (convId: string) => void;
   togglePin: (convId: string) => void;
+  
+  // NEW: Analytics Getters
+  getUsageStats: () => UsageStats;
 }
 
 export const useChatStore = create<ChatState>()(
@@ -67,6 +79,32 @@ export const useChatStore = create<ChatState>()(
       provider: "google",
       usageCount: 0,
       maxLimit: 20,
+
+      // NEW: Dynamic Analytics Calculation
+      getUsageStats: () => {
+        const state = get();
+        const userConvs = state.conversations.filter(c => c.userId === state.currentUser?.id);
+        
+        const promptsByMode: Record<ChatMode, number> = {
+          general: 0,
+          developer: 0,
+          student: 0,
+          writer: 0,
+          productivity: 0
+        };
+
+        userConvs.forEach(c => {
+          const userMessages = c.messages.filter(m => m.role === "user").length;
+          promptsByMode[c.mode] += userMessages;
+        });
+
+        return {
+          totalPrompts: state.usageCount,
+          promptsByMode,
+          remainingQuota: Math.max(0, state.maxLimit - state.usageCount),
+          usagePercentage: (state.usageCount / state.maxLimit) * 100
+        };
+      },
 
       signup: (data) => {
         const isFirstUser = get().users.length === 0;
@@ -153,6 +191,7 @@ export const useChatStore = create<ChatState>()(
       })),
 
       addMessage: (convId, role, content, attachments) => set((state) => ({
+        // Increment usageCount only when the USER sends a message
         usageCount: role === "user" ? state.usageCount + 1 : state.usageCount,
         conversations: state.conversations.map((c) => {
           if (c.id === convId) {
