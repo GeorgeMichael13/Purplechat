@@ -26,6 +26,7 @@ import {
   Star,
   Download,
   ClipboardCheck,
+  FileJson, // Added for JSON export
 } from "lucide-react";
 import { useState, useRef, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -127,6 +128,7 @@ export default function ChatWindow() {
     maxLimit,
     provider,
     togglePin,
+    currentUser,
   } = useChatStore();
 
   const promptsLeft = maxLimit - usageCount;
@@ -149,19 +151,40 @@ export default function ChatWindow() {
     }
   }, [activeConv?.messages, isTyping]);
 
-  // --- NEW FEATURE: DOWNLOAD PDF ---
   const handleDownloadPDF = () => {
     if (!hasMessages) return;
     toast.info("Preparing PDF...");
     window.print();
   };
 
-  // --- NEW FEATURE: COPY FORMATTED TEXT ---
+  // NEW FEATURE: Export pinned messages as JSON
+  const handleExportJSON = () => {
+    if (!hasMessages) return;
+    const pinnedContent = activeConv.messages.filter((m) => m.isPinned);
+    const dataToExport =
+      pinnedContent.length > 0 ? pinnedContent : activeConv.messages;
+
+    const blob = new Blob([JSON.stringify(dataToExport, null, 2)], {
+      type: "application/json",
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `chat-export-${new Date().toLocaleDateString()}.json`;
+    a.click();
+    toast.success(
+      pinnedContent.length > 0
+        ? "Exported pinned messages"
+        : "Exported full chat",
+    );
+  };
+
   const copyFormattedText = async (messageId: string) => {
     const el = document.getElementById(`msg-${messageId}`);
     if (!el) return;
     try {
       const type = "text/html";
+      // Refined to target the rendered text specifically
       const blob = new Blob([el.innerHTML], { type });
       const data = [new ClipboardItem({ [type]: blob })];
       await navigator.clipboard.write(data);
@@ -217,6 +240,7 @@ export default function ChatWindow() {
         body: JSON.stringify({
           mode,
           provider,
+          userContext: currentUser,
           messages: [
             ...(activeConv?.messages || []),
             { role: "user", content: finalPrompt },
@@ -298,7 +322,14 @@ export default function ChatWindow() {
           </div>
         </div>
         <div className="flex items-center gap-1">
-          {/* NEW FEATURE: SAVE/PIN BUTTON */}
+          {/* NEW FEATURE: JSON Export Button */}
+          <button
+            onClick={handleExportJSON}
+            className="p-2 rounded-lg text-slate-400 hover:text-emerald-500 transition-colors"
+            title="Export Data"
+          >
+            <FileJson size={16} />
+          </button>
           <button
             onClick={() =>
               activeConversationId && togglePin(activeConversationId)
@@ -314,8 +345,6 @@ export default function ChatWindow() {
               fill={activeConv?.isPinned ? "currentColor" : "none"}
             />
           </button>
-
-          {/* NEW FEATURE: DOWNLOAD PDF BUTTON */}
           <button
             onClick={handleDownloadPDF}
             className="p-2 rounded-lg text-slate-400 hover:text-violet-500"
@@ -323,7 +352,6 @@ export default function ChatWindow() {
           >
             <Download size={16} />
           </button>
-
           <button
             onClick={() => setTtsEnabled(!ttsEnabled)}
             className={cn(
@@ -371,6 +399,11 @@ export default function ChatWindow() {
               <h1 className="text-5xl font-black text-slate-900 dark:text-white tracking-tighter mb-4">
                 PurpleChat
               </h1>
+              {currentUser && (
+                <p className="text-violet-600 font-bold mb-2">
+                  Welcome back, {currentUser.name}
+                </p>
+              )}
               <p className="text-slate-500 dark:text-slate-400 text-xl font-medium mb-12 italic">
                 "Engineered for Neural Accuracy"
               </p>
@@ -436,9 +469,9 @@ export default function ChatWindow() {
                     <div
                       id={`msg-${msg.id}`}
                       className={cn(
-                        "px-6 py-4 rounded-3xl text-[14.5px] border shadow-sm transition-all",
+                        "px-6 py-4 rounded-3xl text-[14.5px] border shadow-sm transition-all prose prose-slate dark:prose-invert max-w-none",
                         msg.role === "user"
-                          ? "bg-violet-600 border-violet-500 text-white rounded-tr-none"
+                          ? "bg-violet-600 border-violet-500 text-white rounded-tr-none prose-headings:text-white prose-p:text-white"
                           : "bg-white dark:bg-slate-900 border-slate-100 dark:border-white/5 text-slate-800 dark:text-slate-200 rounded-tl-none",
                       )}
                     >
@@ -490,7 +523,6 @@ export default function ChatWindow() {
                             : "left-full ml-2",
                         )}
                       >
-                        {/* NEW FEATURE: FORMATTED COPY BUTTON */}
                         <button
                           onClick={() => copyFormattedText(msg.id)}
                           className="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-500 hover:text-violet-500 shadow-sm border border-slate-200 dark:border-white/10 transition-all"

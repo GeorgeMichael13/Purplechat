@@ -18,12 +18,13 @@ interface Message {
   role: "user" | "assistant";
   content: string;
   timestamp: number;
+  attachments?: any[]; // Added to store file metadata
 }
 
 interface Conversation {
   id: string;
   userId: string;
-  title?: string; // Added for sidebar display
+  title?: string;
   messages: Message[];
   mode: ChatMode;
   provider: AIProvider;
@@ -40,22 +41,17 @@ interface ChatState {
   usageCount: number;
   maxLimit: number;
   
-  // Auth & Leads
   signup: (data: Omit<UserProfile, "id" | "joinedAt" | "role">) => void;
   login: (email: string) => boolean;
   logout: () => void;
   exportLeadsToCSV: () => void;
-  
-  // Admin Actions
   deleteUser: (userId: string) => void;
   broadcastMessage: (content: string) => void;
-  
-  // Actions
   setMode: (mode: ChatMode) => void;
   setActiveConversation: (id: string | null) => void;
-  addMessage: (convId: string, role: "user" | "assistant", content: string) => void;
+  addMessage: (convId: string, role: "user" | "assistant", content: string, attachments?: any[]) => void;
   createNewConversation: (userId?: string) => string;
-  deleteConversation: (id: string) => void; // New Action added
+  deleteConversation: (id: string) => void;
   clearMessages: (convId: string) => void;
   togglePin: (convId: string) => void;
 }
@@ -75,18 +71,13 @@ export const useChatStore = create<ChatState>()(
       signup: (data) => {
         const isFirstUser = get().users.length === 0;
         const role = isFirstUser ? "admin" : "user"; 
-        
         const newUser: UserProfile = { 
           ...data, 
           id: Math.random().toString(36).substring(7), 
           joinedAt: Date.now(),
           role 
         };
-        
-        set((state) => ({ 
-          users: [...state.users, newUser], 
-          currentUser: newUser 
-        }));
+        set((state) => ({ users: [...state.users, newUser], currentUser: newUser }));
       },
 
       login: (email) => {
@@ -125,7 +116,6 @@ export const useChatStore = create<ChatState>()(
         const users = get().users;
         const headers = ["ID", "Name", "Email", "Occupation", "Role", "Joined At"];
         const rows = users.map(u => [u.id, u.name, u.email, u.occupation, u.role, new Date(u.joinedAt).toLocaleDateString()]);
-        
         const csvContent = [headers, ...rows].map(e => e.join(",")).join("\n");
         const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
         const url = URL.createObjectURL(blob);
@@ -138,7 +128,6 @@ export const useChatStore = create<ChatState>()(
       },
 
       setMode: (mode) => set({ mode }),
-      
       setActiveConversation: (id) => set({ activeConversationId: id }),
       
       createNewConversation: (userId) => {
@@ -154,25 +143,19 @@ export const useChatStore = create<ChatState>()(
           provider: get().provider, 
           isPinned: false 
         };
-        
-        set((state) => ({
-          activeConversationId: id,
-          conversations: [...state.conversations, newConv],
-        }));
+        set((state) => ({ activeConversationId: id, conversations: [...state.conversations, newConv] }));
         return id;
       },
 
-      // Logic to delete a single conversation
       deleteConversation: (id) => set((state) => ({
         conversations: state.conversations.filter((c) => c.id !== id),
         activeConversationId: state.activeConversationId === id ? null : state.activeConversationId
       })),
 
-      addMessage: (convId, role, content) => set((state) => ({
+      addMessage: (convId, role, content, attachments) => set((state) => ({
         usageCount: role === "user" ? state.usageCount + 1 : state.usageCount,
         conversations: state.conversations.map((c) => {
           if (c.id === convId) {
-            // If it's the first user message, use it as the conversation title
             const isFirstMessage = c.messages.length === 0 && role === "user";
             return {
               ...c,
@@ -181,7 +164,8 @@ export const useChatStore = create<ChatState>()(
                 id: Math.random().toString(36).substring(7), 
                 role, 
                 content, 
-                timestamp: Date.now() 
+                timestamp: Date.now(),
+                attachments 
               }]
             };
           }

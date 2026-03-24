@@ -84,18 +84,26 @@
   }
 }
 @media print {
-  /* Hide everything except the chat messages */
-  aside,
-  header,
-  .chat-input-container,
-  button {
+  /* Hide everything except the message container */
+  header, .print\:hidden, button, footer {
     display: none !important;
   }
+  
   .custom-scrollbar {
     overflow: visible !important;
+    height: auto !important;
   }
+
+  /* Ensure the background is white for ink saving */
   body {
     background: white !important;
     color: black !important;
+  }
+
+  /* Force chat bubbles to show borders/colors in PDF */
+  .rounded-3xl {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+    border: 1px solid #e2e8f0 !important;
   }
 }
