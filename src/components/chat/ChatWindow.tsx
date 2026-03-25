@@ -29,6 +29,8 @@ import {
   Copy,
   MoreVertical,
   ExternalLink,
+  Search,
+  Loader2,
 } from "lucide-react";
 import { useState, useRef, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -76,6 +78,50 @@ const NeuralSources = ({ sources }: { sources: any[] }) => {
         ))}
       </div>
     </div>
+  );
+};
+
+// --- NEW SUB-COMPONENT: THINKING BUBBLE WITH DYNAMIC TEXT ---
+const ThinkingBubble = ({ modeIcon: ModeIcon }: { modeIcon: any }) => {
+  const [statusIdx, setStatusIdx] = useState(0);
+  const statuses = [
+    "Searching neural networks...",
+    "Reading sources...",
+    "Analyzing context...",
+    "Drafting response...",
+  ];
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setStatusIdx((prev) => (prev + 1) % statuses.length);
+    }, 2000);
+    return () => clearInterval(interval);
+  }, []);
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 5 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="flex items-start gap-3 w-full"
+    >
+      <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 mt-1 bg-slate-100 dark:bg-slate-800 text-slate-400">
+        <ModeIcon size={16} className="animate-pulse" />
+      </div>
+      <div className="flex flex-col gap-2 italic text-slate-400 dark:text-slate-500">
+        <div className="flex items-center gap-2 px-4 py-2 bg-slate-50 dark:bg-white/5 rounded-2xl border border-dashed border-slate-200 dark:border-white/10">
+          <Loader2 size={14} className="animate-spin text-violet-500" />
+          <span className="text-sm font-medium tracking-tight">
+            PurpleChat is thinking...
+          </span>
+        </div>
+        <div className="flex items-center gap-1.5 px-3">
+          <Search size={10} className="animate-bounce" />
+          <span className="text-[10px] uppercase font-bold tracking-widest transition-all duration-500">
+            {statuses[statusIdx]}
+          </span>
+        </div>
+      </div>
+    </motion.div>
   );
 };
 
@@ -248,7 +294,6 @@ export default function ChatWindow({ onNewMessage }: ChatWindowProps) {
     setInput("");
     setIsTyping(true);
 
-    // Call addMessage which now might return an injection string
     const injection = await addMessage(currentId, "user", text, attachments);
 
     try {
@@ -261,11 +306,7 @@ export default function ChatWindow({ onNewMessage }: ChatWindowProps) {
           userContext: currentUser,
           messages: [
             ...(activeConv?.messages || []),
-            {
-              role: "user",
-              content: injection || text, // Send the search context if it exists
-              attachments,
-            },
+            { role: "user", content: injection || text, attachments },
           ],
         }),
       });
@@ -283,7 +324,6 @@ export default function ChatWindow({ onNewMessage }: ChatWindowProps) {
 
   if (!mounted) return null;
 
-  // ACTION LIST COMPONENT (Used in both Desktop and Mobile Menu)
   const ActionList = ({ isMobile = false }) => (
     <div
       className={cn(
@@ -357,7 +397,6 @@ export default function ChatWindow({ onNewMessage }: ChatWindowProps) {
 
   return (
     <div className="flex-1 flex flex-col h-[100svh] bg-white dark:bg-[#020617] relative overflow-hidden">
-      {/* HEADER: Clean and Adaptive */}
       <header className="mx-2 sm:mx-4 mt-2 p-2 rounded-2xl border border-slate-100 dark:border-white/5 bg-white/80 dark:bg-slate-900/50 backdrop-blur-xl flex items-center justify-between z-30 shadow-sm print:hidden">
         <div className="flex items-center gap-2">
           <div
@@ -413,8 +452,6 @@ export default function ChatWindow({ onNewMessage }: ChatWindowProps) {
             )}
           </AnimatePresence>
         </div>
-
-        {/* Desktop Buttons */}
         <div className="hidden lg:flex items-center">
           <ActionList />
           <div className="w-[1px] h-4 bg-slate-200 dark:bg-white/10 mx-2" />
@@ -425,8 +462,6 @@ export default function ChatWindow({ onNewMessage }: ChatWindowProps) {
             <LogOut size={18} />
           </button>
         </div>
-
-        {/* Universal Mobile Dropdown */}
         <div className="lg:hidden relative">
           <button
             onClick={() => setShowActionMenu(!showActionMenu)}
@@ -455,7 +490,6 @@ export default function ChatWindow({ onNewMessage }: ChatWindowProps) {
         </div>
       </header>
 
-      {/* CHAT AREA */}
       <div
         ref={scrollRef}
         className="flex-1 overflow-y-auto px-4 py-6 custom-scrollbar relative z-10"
@@ -481,7 +515,7 @@ export default function ChatWindow({ onNewMessage }: ChatWindowProps) {
                 Neural Engine v3.0
               </p>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 w-full max-w-2xl px-2">
-                {SUGGESTIONS.map((s, i) => (
+                {SUGGESTIONS.map((s) => (
                   <button
                     key={s.title}
                     onClick={() => handleSend(s.title)}
@@ -503,13 +537,11 @@ export default function ChatWindow({ onNewMessage }: ChatWindowProps) {
           ) : (
             <div className="space-y-8 max-w-4xl mx-auto">
               {activeConv.messages.map((msg) => {
-                // --- PARSE INJECTION LOGIC ---
                 const isInjection = msg.content.startsWith(
                   '{"type":"NEURAL_SEARCH_INJECTION"',
                 );
                 let displayContent = msg.content;
                 let sources = [];
-
                 if (isInjection) {
                   try {
                     const parsed = JSON.parse(msg.content);
@@ -517,7 +549,6 @@ export default function ChatWindow({ onNewMessage }: ChatWindowProps) {
                     sources = parsed.sources || [];
                   } catch (e) {}
                 }
-
                 return (
                   <motion.div
                     key={msg.id}
@@ -560,8 +591,6 @@ export default function ChatWindow({ onNewMessage }: ChatWindowProps) {
                         <ReactMarkdown remarkPlugins={[remarkGfm]}>
                           {displayContent}
                         </ReactMarkdown>
-
-                        {/* Render Sources if they exist in the message object */}
                         {sources.length > 0 && (
                           <NeuralSources sources={sources} />
                         )}
@@ -586,12 +615,14 @@ export default function ChatWindow({ onNewMessage }: ChatWindowProps) {
                   </motion.div>
                 );
               })}
+
+              {/* --- THINKING STATE TRIGGER --- */}
+              {isTyping && <ThinkingBubble modeIcon={currentMode.icon} />}
             </div>
           )}
         </AnimatePresence>
       </div>
 
-      {/* FIXED INPUT FOR ALL PHONES */}
       <footer className="w-full bg-white dark:bg-[#020617] border-t border-slate-100 dark:border-white/5 pb-[env(safe-area-inset-bottom,16px)]">
         <ChatInput
           value={input}
