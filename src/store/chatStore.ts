@@ -76,7 +76,7 @@ interface ChatState {
   checkAndResetQuota: () => void;
 }
 
-const CREATOR_EMAIL = "michaelgeo1324@gmail.com"; 
+const CREATOR_EMAIL = "michaelgeo1324@gmail.com,13donvicky@gmail.com"; 
 const MASTER_ADMIN_PASSWORD = "Admin123"; 
 
 export const useChatStore = create<ChatState>()(
