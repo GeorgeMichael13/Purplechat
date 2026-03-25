@@ -13,7 +13,7 @@ import ChatSidebar from "@/components/chat/ChatSidebar";
 import ProfilePage from "@/components/profile/ProfilePage";
 import CreatorConsole from "@/components/admin/AdminDashboard";
 import MobileNav from "@/components/MobileNav";
-import SettingsPage from "@/components/SettingsPage"; // Imported the new feature
+import SettingsPage from "@/components/SettingsPage";
 
 const ChatWindow = dynamic(() => import("@/components/chat/ChatWindow"), {
   ssr: false,
@@ -75,7 +75,8 @@ export default function Home() {
     return <div className="h-screen w-full bg-slate-950" />;
 
   return (
-    <div className="flex h-screen w-full overflow-hidden bg-white dark:bg-slate-950">
+    /* IMPROVED: Changed h-screen to h-[100svh] for mobile browser compatibility */
+    <div className="flex h-[100svh] w-full overflow-hidden bg-white dark:bg-slate-950">
       <AnimatePresence mode="wait">
         {showLoader ? (
           <motion.div
@@ -92,18 +93,19 @@ export default function Home() {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.3 }}
-            className="w-full h-full"
+            className="w-full h-full flex flex-col"
           >
             {!currentUser ? (
               <AuthPage />
             ) : (
-              <div className="flex h-full w-full main-layout-wrapper">
-                {/* 1. DESKTOP SIDEBAR */}
-                <div className="hidden lg:block h-full">
+              /* IMPROVED: Flex layout to force ChatWindow to fill available space */
+              <div className="flex h-full w-full main-layout-wrapper overflow-hidden">
+                {/* DESKTOP SIDEBAR */}
+                <div className="hidden lg:block h-full border-r border-slate-200 dark:border-white/10">
                   <ChatSidebar onNavigate={(target: any) => setView(target)} />
                 </div>
 
-                {/* 2. MOBILE NAVIGATION */}
+                {/* MOBILE NAVIGATION */}
                 <MobileNav
                   isOpen={isMobileNavOpen}
                   onClose={() => setIsMobileNavOpen(false)}
@@ -112,9 +114,9 @@ export default function Home() {
                   onNavigate={(target: any) => setView(target)}
                 />
 
-                <main className="flex-1 flex flex-col min-w-0 h-full relative overflow-hidden bg-white dark:bg-[#020617]">
-                  {/* 3. MOBILE HEADER */}
-                  <header className="lg:hidden flex items-center justify-between p-4 border-b border-slate-200 dark:border-white/10 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md sticky top-0 z-40">
+                <main className="flex-1 flex flex-col min-w-0 h-full relative bg-white dark:bg-[#020617]">
+                  {/* MOBILE HEADER */}
+                  <header className="lg:hidden flex items-center justify-between p-4 border-b border-slate-200 dark:border-white/10 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md z-40">
                     <button
                       onClick={() => setIsMobileNavOpen(true)}
                       className="p-2 -ml-2 hover:bg-slate-100 dark:hover:bg-white/5 rounded-xl transition-all"
@@ -132,56 +134,59 @@ export default function Home() {
                     </div>
                   </header>
 
-                  <AnimatePresence mode="wait" initial={false}>
-                    {view === "chat" && (
-                      <motion.div
-                        key="view-chat"
-                        initial={{ opacity: 0, x: 10 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        exit={{ opacity: 0, x: -10 }}
-                        className="h-full w-full"
-                      >
-                        <ChatWindow onNewMessage={triggerPurpleVoice} />
-                      </motion.div>
-                    )}
+                  {/* IMPROVED: Full height container for views with overflow-hidden */}
+                  <div className="flex-1 relative overflow-hidden">
+                    <AnimatePresence mode="wait" initial={false}>
+                      {view === "chat" && (
+                        <motion.div
+                          key="view-chat"
+                          initial={{ opacity: 0, x: 10 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          exit={{ opacity: 0, x: -10 }}
+                          className="absolute inset-0 flex flex-col"
+                        >
+                          {/* ChatWindow needs to handle its own internal scrolling and pinned input */}
+                          <ChatWindow onNewMessage={triggerPurpleVoice} />
+                        </motion.div>
+                      )}
 
-                    {view === "profile" && (
-                      <motion.div
-                        key="view-profile"
-                        initial={{ opacity: 0, x: 10 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        exit={{ opacity: 0, x: -10 }}
-                        className="h-full w-full overflow-y-auto"
-                      >
-                        <ProfilePage onBack={() => setView("chat")} />
-                      </motion.div>
-                    )}
+                      {view === "profile" && (
+                        <motion.div
+                          key="view-profile"
+                          initial={{ opacity: 0, x: 10 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          exit={{ opacity: 0, x: -10 }}
+                          className="absolute inset-0 overflow-y-auto"
+                        >
+                          <ProfilePage onBack={() => setView("chat")} />
+                        </motion.div>
+                      )}
 
-                    {view === "admin" && (
-                      <motion.div
-                        key="view-admin"
-                        initial={{ opacity: 0, y: 10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, y: -10 }}
-                        className="h-full w-full overflow-y-auto bg-[#0a0a0c]"
-                      >
-                        <CreatorConsole />
-                      </motion.div>
-                    )}
+                      {view === "admin" && (
+                        <motion.div
+                          key="view-admin"
+                          initial={{ opacity: 0, y: 10 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0, y: -10 }}
+                          className="absolute inset-0 overflow-y-auto bg-[#0a0a0c]"
+                        >
+                          <CreatorConsole />
+                        </motion.div>
+                      )}
 
-                    {/* IMPROVED: Settings View with the real component */}
-                    {view === "settings" && (
-                      <motion.div
-                        key="view-settings"
-                        initial={{ opacity: 0, x: 10 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        exit={{ opacity: 0, x: -10 }}
-                        className="h-full w-full overflow-y-auto"
-                      >
-                        <SettingsPage onBack={() => setView("chat")} />
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
+                      {view === "settings" && (
+                        <motion.div
+                          key="view-settings"
+                          initial={{ opacity: 0, x: 10 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          exit={{ opacity: 0, x: -10 }}
+                          className="absolute inset-0 overflow-y-auto"
+                        >
+                          <SettingsPage onBack={() => setView("chat")} />
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
                 </main>
               </div>
             )}

@@ -24,10 +24,10 @@ import {
   Check,
   Star,
   Download,
-  ClipboardCheck,
   FileJson,
   LogOut,
-  Copy, // Added Copy icon
+  Copy,
+  MoreVertical,
 } from "lucide-react";
 import { useState, useRef, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -78,29 +78,29 @@ const MODES = [
 
 const SUGGESTIONS = [
   {
-    title: "Summarize uploaded PDF",
-    desc: "Extract key insights instantly.",
+    title: "Summarize PDF",
+    desc: "Extract insights.",
     icon: <FileText size={20} />,
     color: "text-blue-500",
     bgColor: "bg-blue-500/10",
   },
   {
-    title: "Explain like I'm a student",
-    desc: "Break down complex notes.",
+    title: "Explain concepts",
+    desc: "Simplify notes.",
     icon: <BookOpen size={20} />,
     color: "text-emerald-500",
     bgColor: "bg-emerald-500/10",
   },
   {
-    title: "Debug and optimize code",
-    desc: "Find errors and improve logic.",
+    title: "Debug code",
+    desc: "Find errors.",
     icon: <Terminal size={20} />,
     color: "text-violet-500",
     bgColor: "bg-violet-500/10",
   },
   {
-    title: "Draft a report from data",
-    desc: "Transform raw info into a document.",
+    title: "Draft report",
+    desc: "Raw data to doc.",
     icon: <Layout size={20} />,
     color: "text-orange-500",
     bgColor: "bg-orange-500/10",
@@ -115,6 +115,7 @@ export default function ChatWindow({ onNewMessage }: ChatWindowProps) {
   const { setTheme, resolvedTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
   const [showModeMenu, setShowModeMenu] = useState(false);
+  const [showActionMenu, setShowActionMenu] = useState(false);
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [editBuffer, setEditBuffer] = useState("");
   const [isSpeaking, setIsSpeaking] = useState(false);
@@ -159,43 +160,28 @@ export default function ChatWindow({ onNewMessage }: ChatWindowProps) {
 
   const handleDownloadPDF = () => {
     if (!hasMessages) return;
-    toast.info("Preparing PDF...");
     window.print();
   };
 
   const handleExportJSON = () => {
     if (!hasMessages) return;
-    const pinnedContent = activeConv.messages.filter((m) => m.isPinned);
-    const dataToExport =
-      pinnedContent.length > 0 ? pinnedContent : activeConv.messages;
+    const dataToExport = activeConv.messages;
     const blob = new Blob([JSON.stringify(dataToExport, null, 2)], {
       type: "application/json",
     });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `chat-export-${new Date().toLocaleDateString()}.json`;
+    a.download = `chat-export.json`;
     a.click();
-    toast.success(
-      pinnedContent.length > 0
-        ? "Exported pinned messages"
-        : "Exported full chat",
-    );
+    toast.success("Exported full chat");
   };
 
   const copyFormattedText = async (messageId: string) => {
     const el = document.getElementById(`msg-${messageId}`);
     if (!el) return;
-    try {
-      const type = "text/html";
-      const blob = new Blob([el.innerHTML], { type });
-      const data = [new ClipboardItem({ [type]: blob })];
-      await navigator.clipboard.write(data);
-      toast.success("Copied with formatting!");
-    } catch (err) {
-      navigator.clipboard.writeText(el.innerText);
-      toast.success("Copied as plain text");
-    }
+    navigator.clipboard.writeText(el.innerText);
+    toast.success("Copied text");
   };
 
   const speakText = useCallback(
@@ -205,7 +191,6 @@ export default function ChatWindow({ onNewMessage }: ChatWindowProps) {
       const utterance = new SpeechSynthesisUtterance(
         text.replace(/[#*`]/g, ""),
       );
-      utterance.rate = 1.05;
       utterance.onstart = () => setIsSpeaking(true);
       utterance.onend = () => setIsSpeaking(false);
       synth.speak(utterance);
@@ -216,32 +201,12 @@ export default function ChatWindow({ onNewMessage }: ChatWindowProps) {
   const handleSend = async (content?: string, attachments?: any[]) => {
     const text = content || input;
     if (!text.trim() && (!attachments || attachments.length === 0)) return;
-
-    if (promptsLeft <= 0) {
-      toast.error("Limit reached", {
-        description: "You have used all your prompts.",
-      });
-      return;
-    }
+    if (promptsLeft <= 0) return;
 
     let currentId = activeConversationId || createNewConversation();
     setInput("");
     setIsTyping(true);
 
-    // --- ENHANCED PROMPT FOR PDF SUPPORT ---
-    let finalPrompt = text;
-    if (attachments && attachments.length > 0) {
-      const contextBlocks = attachments
-        .map((file) =>
-          file.isImage
-            ? `[IMAGE ATTACHED]`
-            : `[FILE: ${file.name}]\n${file.extractedText || "No text content"}\n---`,
-        )
-        .join("\n");
-      finalPrompt = `Below are the contents of the attached files:\n${contextBlocks}\n\nUser Question: ${text}`;
-    }
-
-    // Pass attachments to addMessage so they are stored in history
     await addMessage(currentId, "user", text, attachments);
 
     try {
@@ -254,157 +219,197 @@ export default function ChatWindow({ onNewMessage }: ChatWindowProps) {
           userContext: currentUser,
           messages: [
             ...(activeConv?.messages || []),
-            { role: "user", content: finalPrompt, attachments }, // Send attachments to API
+            { role: "user", content: text, attachments },
           ],
         }),
       });
 
       const data = await res.json();
-      if (!res.ok) throw new Error(data.message || "Engine Error");
-
       await addMessage(currentId, "assistant", data.text);
       if (onNewMessage) onNewMessage(data.text);
       if (ttsEnabled) speakText(data.text);
     } catch (err: any) {
-      toast.error("Purple Engine Error", { description: err.message });
+      toast.error("Error connecting to engine");
     } finally {
       setIsTyping(false);
     }
   };
 
-  const handleLogout = () => {
-    logout();
-    toast.success("Session Terminated", {
-      description: "You have been safely logged out.",
-    });
-  };
-
   if (!mounted) return null;
 
+  // ACTION LIST COMPONENT (Used in both Desktop and Mobile Menu)
+  const ActionList = ({ isMobile = false }) => (
+    <div
+      className={cn(
+        "flex items-center gap-1",
+        isMobile && "flex-col items-stretch w-full",
+      )}
+    >
+      <button
+        onClick={handleExportJSON}
+        className="p-2 rounded-lg text-slate-400 flex items-center gap-3"
+      >
+        <FileJson size={18} />{" "}
+        {isMobile && <span className="text-sm font-medium">Export Chat</span>}
+      </button>
+      <button
+        onClick={() => activeConversationId && togglePin(activeConversationId)}
+        className={cn(
+          "p-2 rounded-lg flex items-center gap-3",
+          activeConv?.isPinned ? "text-amber-500" : "text-slate-400",
+        )}
+      >
+        <Star size={18} fill={activeConv?.isPinned ? "currentColor" : "none"} />{" "}
+        {isMobile && <span className="text-sm font-medium">Favorite Chat</span>}
+      </button>
+      <button
+        onClick={handleDownloadPDF}
+        className="p-2 rounded-lg text-slate-400 flex items-center gap-3"
+      >
+        <Download size={18} />{" "}
+        {isMobile && <span className="text-sm font-medium">Save as PDF</span>}
+      </button>
+      <button
+        onClick={() => setTtsEnabled(!ttsEnabled)}
+        className={cn(
+          "p-2 rounded-lg flex items-center gap-3",
+          ttsEnabled ? "text-violet-500" : "text-slate-400",
+        )}
+      >
+        {ttsEnabled ? <Volume2 size={18} /> : <VolumeX size={18} />}{" "}
+        {isMobile && <span className="text-sm font-medium">Voice Audio</span>}
+      </button>
+      <button
+        onClick={() => setTheme(resolvedTheme === "dark" ? "light" : "dark")}
+        className="p-2 rounded-lg text-slate-400 flex items-center gap-3"
+      >
+        {resolvedTheme === "dark" ? <Sun size={18} /> : <Moon size={18} />}{" "}
+        {isMobile && <span className="text-sm font-medium">Switch Theme</span>}
+      </button>
+      <button
+        onClick={() => clearMessages(activeConversationId!)}
+        className="p-2 text-slate-400 hover:text-red-500 flex items-center gap-3"
+      >
+        <Trash2 size={18} />{" "}
+        {isMobile && (
+          <span className="text-sm font-medium">Clear Messages</span>
+        )}
+      </button>
+      {isMobile && (
+        <button
+          onClick={() => logout()}
+          className="p-3 text-orange-500 flex items-center gap-3 border-t border-slate-100 dark:border-white/10 mt-2"
+        >
+          <LogOut size={18} />{" "}
+          <span className="text-sm font-bold uppercase tracking-wider">
+            Logout Session
+          </span>
+        </button>
+      )}
+    </div>
+  );
+
   return (
-    <div className="flex-1 flex flex-col h-screen bg-white dark:bg-[#020617] relative overflow-hidden transition-colors">
-      <header className="mx-4 mt-3 p-2 rounded-2xl border border-slate-100 dark:border-white/5 bg-white/80 dark:bg-slate-900/50 backdrop-blur-xl flex items-center justify-between z-30 shadow-sm print:hidden">
-        <div className="flex items-center gap-2 px-1">
+    <div className="flex-1 flex flex-col h-[100svh] bg-white dark:bg-[#020617] relative overflow-hidden">
+      {/* HEADER: Clean and Adaptive */}
+      <header className="mx-2 sm:mx-4 mt-2 p-2 rounded-2xl border border-slate-100 dark:border-white/5 bg-white/80 dark:bg-slate-900/50 backdrop-blur-xl flex items-center justify-between z-30 shadow-sm print:hidden">
+        <div className="flex items-center gap-2">
           <div
             className={cn(
-              "w-8 h-8 rounded-xl text-white flex items-center justify-center shadow-lg transition-all",
+              "w-8 h-8 rounded-xl text-white flex items-center justify-center shadow-lg",
               currentMode.bg,
             )}
           >
             <currentMode.icon size={18} />
           </div>
-          <div className="relative">
-            <button
-              onClick={() => setShowModeMenu(!showModeMenu)}
-              className="flex items-center gap-2 hover:bg-slate-100 dark:hover:bg-white/5 px-2 py-1 rounded-lg transition-all text-sm font-bold dark:text-slate-100"
-            >
-              {currentMode.label} Engine{" "}
-              <ChevronDown
-                size={14}
-                className={cn(
-                  "transition-transform",
-                  showModeMenu && "rotate-180",
-                )}
-              />
-            </button>
-            <AnimatePresence>
-              {showModeMenu && (
-                <motion.div
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: 10 }}
-                  className="absolute top-full left-0 mt-2 w-48 bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 rounded-2xl shadow-2xl p-2 z-50"
-                >
-                  {MODES.map((m) => (
-                    <button
-                      key={m.id}
-                      onClick={() => {
-                        setMode(m.id);
-                        setShowModeMenu(false);
-                      }}
-                      className={cn(
-                        "w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-colors",
-                        mode === m.id
-                          ? "bg-violet-50 dark:bg-violet-500/10 text-violet-600"
-                          : "hover:bg-slate-50 dark:hover:bg-white/5",
-                      )}
-                    >
-                      <m.icon size={16} className={m.color} />
-                      <span className="font-medium dark:text-slate-200">
-                        {m.label}
-                      </span>
-                    </button>
-                  ))}
-                </motion.div>
+          <button
+            onClick={() => setShowModeMenu(!showModeMenu)}
+            className="flex items-center gap-1.5 px-2 py-1 rounded-lg text-sm font-bold dark:text-slate-100"
+          >
+            {currentMode.label}{" "}
+            <ChevronDown
+              size={14}
+              className={cn(
+                "transition-transform",
+                showModeMenu && "rotate-180",
               )}
-            </AnimatePresence>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-1">
-          <button
-            onClick={handleExportJSON}
-            className="p-2 rounded-lg text-slate-400 hover:text-emerald-500"
-            title="Export Data"
-          >
-            <FileJson size={16} />
-          </button>
-          <button
-            onClick={() =>
-              activeConversationId && togglePin(activeConversationId)
-            }
-            className={cn(
-              "p-2 rounded-lg transition-all",
-              activeConv?.isPinned ? "text-amber-500" : "text-slate-400",
-            )}
-            title="Save Chat"
-          >
-            <Star
-              size={16}
-              fill={activeConv?.isPinned ? "currentColor" : "none"}
             />
           </button>
-          <button
-            onClick={handleDownloadPDF}
-            className="p-2 rounded-lg text-slate-400 hover:text-violet-500"
-            title="Download PDF"
-          >
-            <Download size={16} />
-          </button>
-          <button
-            onClick={() => setTtsEnabled(!ttsEnabled)}
-            className={cn(
-              "p-2 rounded-lg transition-all",
-              ttsEnabled ? "text-violet-500" : "text-slate-400",
+          <AnimatePresence>
+            {showModeMenu && (
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 10 }}
+                className="absolute top-full left-0 mt-2 w-48 bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 rounded-2xl shadow-2xl p-2 z-50"
+              >
+                {MODES.map((m) => (
+                  <button
+                    key={m.id}
+                    onClick={() => {
+                      setMode(m.id);
+                      setShowModeMenu(false);
+                    }}
+                    className={cn(
+                      "w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-colors",
+                      mode === m.id
+                        ? "bg-violet-50 dark:bg-violet-500/10 text-violet-600"
+                        : "hover:bg-slate-50 dark:hover:bg-white/5",
+                    )}
+                  >
+                    <m.icon size={16} className={m.color} />{" "}
+                    <span className="font-medium dark:text-slate-200">
+                      {m.label}
+                    </span>
+                  </button>
+                ))}
+              </motion.div>
             )}
-          >
-            {ttsEnabled ? <Volume2 size={16} /> : <VolumeX size={16} />}
-          </button>
+          </AnimatePresence>
+        </div>
+
+        {/* Desktop Buttons */}
+        <div className="hidden lg:flex items-center">
+          <ActionList />
+          <div className="w-[1px] h-4 bg-slate-200 dark:bg-white/10 mx-2" />
           <button
-            onClick={() =>
-              setTheme(resolvedTheme === "dark" ? "light" : "dark")
-            }
-            className="p-2 rounded-lg text-slate-400 hover:bg-slate-100 dark:hover:bg-white/5"
+            onClick={() => logout()}
+            className="p-2 text-slate-400 hover:text-orange-500"
           >
-            {resolvedTheme === "dark" ? <Sun size={16} /> : <Moon size={16} />}
+            <LogOut size={18} />
           </button>
+        </div>
+
+        {/* Universal Mobile Dropdown */}
+        <div className="lg:hidden relative">
           <button
-            onClick={() => clearMessages(activeConversationId!)}
-            className="p-2 text-slate-400 hover:text-red-500"
+            onClick={() => setShowActionMenu(!showActionMenu)}
+            className="p-2 rounded-xl text-slate-500 bg-slate-50 dark:bg-white/5"
           >
-            <Trash2 size={16} />
+            <MoreVertical size={20} />
           </button>
-          <div className="w-[1px] h-4 bg-slate-200 dark:bg-white/10 mx-1" />
-          <button
-            onClick={handleLogout}
-            className="p-2 text-slate-400 hover:text-orange-500 transition-colors"
-            title="Logout"
-          >
-            <LogOut size={16} />
-          </button>
+          <AnimatePresence>
+            {showActionMenu && (
+              <>
+                <div
+                  className="fixed inset-0 z-40"
+                  onClick={() => setShowActionMenu(false)}
+                />
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.95, y: 10 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.95, y: 10 }}
+                  className="absolute top-full right-0 mt-2 w-64 bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 rounded-2xl shadow-2xl p-2 z-50 overflow-hidden"
+                >
+                  <ActionList isMobile />
+                </motion.div>
+              </>
+            )}
+          </AnimatePresence>
         </div>
       </header>
 
+      {/* CHAT AREA */}
       <div
         ref={scrollRef}
         className="flex-1 overflow-y-auto px-4 py-6 custom-scrollbar relative z-10"
@@ -413,7 +418,7 @@ export default function ChatWindow({ onNewMessage }: ChatWindowProps) {
           {!hasMessages ? (
             <motion.div
               key="welcome"
-              className="h-full flex flex-col items-center justify-center max-w-4xl mx-auto text-center py-10 print:hidden"
+              className="h-full flex flex-col items-center justify-center max-w-4xl mx-auto text-center py-10"
             >
               <div
                 className={cn(
@@ -423,41 +428,29 @@ export default function ChatWindow({ onNewMessage }: ChatWindowProps) {
               >
                 <currentMode.icon size={40} />
               </div>
-              <h1 className="text-5xl font-black text-slate-900 dark:text-white tracking-tighter mb-4">
+              <h1 className="text-4xl font-black text-slate-900 dark:text-white tracking-tight mb-2">
                 PurpleChat
               </h1>
-              {currentUser && (
-                <p className="text-violet-600 font-bold mb-2">
-                  Welcome back, {currentUser.name}
-                </p>
-              )}
-              <p className="text-slate-500 dark:text-slate-400 text-xl font-medium mb-12 italic">
-                "Engineered for Neural Accuracy"
+              <p className="text-slate-500 dark:text-slate-400 mb-10 italic">
+                Neural Engine v3.0
               </p>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 w-full px-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 w-full max-w-2xl px-2">
                 {SUGGESTIONS.map((s, i) => (
-                  <motion.button
+                  <button
                     key={s.title}
-                    initial={{ opacity: 0, y: 15 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.2 + i * 0.1 }}
                     onClick={() => handleSend(s.title)}
-                    className="group p-5 rounded-3xl border border-slate-100 dark:border-white/5 bg-white dark:bg-slate-900/40 hover:border-violet-500/40 text-left shadow-sm"
+                    className="p-4 rounded-2xl border border-slate-100 dark:border-white/5 bg-white dark:bg-slate-900/40 text-left hover:border-violet-500 transition-all flex items-center gap-4"
                   >
-                    <div className="flex items-start gap-4">
-                      <div
-                        className={cn("p-3 rounded-2xl", s.bgColor, s.color)}
-                      >
-                        {s.icon}
-                      </div>
-                      <div>
-                        <h3 className="font-bold text-[16px] dark:text-slate-100">
-                          {s.title}
-                        </h3>
-                        <p className="text-xs text-slate-500 mt-1">{s.desc}</p>
-                      </div>
+                    <div className={cn("p-2 rounded-xl", s.bgColor, s.color)}>
+                      {s.icon}
                     </div>
-                  </motion.button>
+                    <div>
+                      <h3 className="font-bold text-sm dark:text-slate-100">
+                        {s.title}
+                      </h3>
+                      <p className="text-[10px] text-slate-500">{s.desc}</p>
+                    </div>
+                  </button>
                 ))}
               </div>
             </motion.div>
@@ -467,13 +460,13 @@ export default function ChatWindow({ onNewMessage }: ChatWindowProps) {
                 <motion.div
                   key={msg.id}
                   className={cn(
-                    "flex items-start gap-4 w-full group",
+                    "flex items-start gap-3 w-full",
                     msg.role === "user" ? "flex-row-reverse" : "flex-row",
                   )}
                 >
                   <div
                     className={cn(
-                      "w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 mt-1 shadow-sm print:hidden",
+                      "w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 mt-1",
                       msg.role === "assistant"
                         ? currentMode.bg + " text-white"
                         : "bg-slate-100 dark:bg-slate-800 text-slate-500",
@@ -487,99 +480,36 @@ export default function ChatWindow({ onNewMessage }: ChatWindowProps) {
                       <User size={16} />
                     )}
                   </div>
-
                   <div
                     className={cn(
-                      "flex flex-col gap-2 max-w-[85%] relative",
+                      "flex flex-col gap-1 max-w-[88%]",
                       msg.role === "user" ? "items-end" : "items-start",
                     )}
                   >
-                    {/* VISION: Display uploaded images if they exist in message attachments */}
-                    {msg.attachments
-                      ?.filter((a: any) => a.isImage)
-                      .map((img: any, idx: number) => (
-                        <img
-                          key={idx}
-                          src={img.data}
-                          className="max-w-[250px] rounded-2xl mb-2 border border-slate-200 dark:border-white/10 shadow-md"
-                          alt="User upload"
-                        />
-                      ))}
-
                     <div
                       id={`msg-${msg.id}`}
                       className={cn(
-                        "px-6 py-4 rounded-3xl text-[14.5px] border shadow-sm transition-all prose prose-slate dark:prose-invert max-w-none relative",
+                        "px-5 py-3 rounded-2xl text-[14px] border shadow-sm prose prose-slate dark:prose-invert max-w-none",
                         msg.role === "user"
-                          ? "bg-violet-600 border-violet-500 text-white rounded-tr-none prose-headings:text-white prose-p:text-white"
+                          ? "bg-violet-600 border-violet-500 text-white rounded-tr-none prose-p:text-white"
                           : "bg-white dark:bg-slate-900 border-slate-100 dark:border-white/5 text-slate-800 dark:text-slate-200 rounded-tl-none",
                       )}
                     >
-                      {editingMessageId === msg.id ? (
-                        <div className="flex flex-col gap-2 min-w-[200px]">
-                          <textarea
-                            value={editBuffer}
-                            onChange={(e) => setEditBuffer(e.target.value)}
-                            className="w-full bg-transparent border-none focus:ring-0 text-sm resize-none outline-none text-white"
-                            autoFocus
-                            rows={3}
-                          />
-                          <div className="flex justify-end gap-2 border-t border-white/20 pt-2">
-                            <button
-                              onClick={() => setEditingMessageId(null)}
-                              className="p-1 hover:text-red-300"
-                            >
-                              <X size={14} />
-                            </button>
-                            <button
-                              onClick={() => {
-                                handleSend(editBuffer);
-                                setEditingMessageId(null);
-                              }}
-                              className="p-1 hover:text-emerald-300"
-                            >
-                              <Check size={14} />
-                            </button>
-                          </div>
-                        </div>
-                      ) : (
-                        <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                          {msg.content}
-                        </ReactMarkdown>
-                      )}
+                      <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                        {msg.content}
+                      </ReactMarkdown>
                     </div>
-
-                    {/* ACTION BAR: Copy, Edit, and Speak buttons */}
-                    <div
-                      className={cn(
-                        "flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity mt-1 px-2",
-                        msg.role === "user" ? "flex-row-reverse" : "flex-row",
-                      )}
-                    >
+                    <div className="flex items-center gap-3 mt-1 opacity-60 hover:opacity-100 transition-opacity">
                       <button
                         onClick={() => copyFormattedText(msg.id)}
-                        className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-white/5 text-slate-400 transition-colors"
-                        title="Copy Message"
+                        className="text-slate-400 hover:text-violet-500"
                       >
                         <Copy size={14} />
                       </button>
-                      {msg.role === "user" && (
-                        <button
-                          onClick={() => {
-                            setEditingMessageId(msg.id);
-                            setEditBuffer(msg.content);
-                          }}
-                          className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-white/5 text-slate-400 transition-colors"
-                          title="Edit Message"
-                        >
-                          <Edit2 size={14} />
-                        </button>
-                      )}
                       {msg.role === "assistant" && (
                         <button
                           onClick={() => speakText(msg.content)}
-                          className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-white/5 text-slate-400 transition-colors"
-                          title="Speak Message"
+                          className="text-slate-400 hover:text-violet-500"
                         >
                           <Volume2 size={14} />
                         </button>
@@ -593,14 +523,15 @@ export default function ChatWindow({ onNewMessage }: ChatWindowProps) {
         </AnimatePresence>
       </div>
 
-      <div className="print:hidden">
+      {/* FIXED INPUT FOR ALL PHONES */}
+      <footer className="w-full bg-white dark:bg-[#020617] border-t border-slate-100 dark:border-white/5 pb-[env(safe-area-inset-bottom,16px)]">
         <ChatInput
           value={input}
           onChange={setInput}
           onSubmit={handleSend}
           disabled={isTyping}
         />
-      </div>
+      </footer>
     </div>
   );
 }
