@@ -11,16 +11,16 @@ import {
   Volume2,
   VolumeX,
   Square,
+  Plus,
+  Image as ImageIcon,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
-// --- NEW FEATURE: PDF SUPPORT ---
-import * as pdfjsLib from "pdfjs-dist";
+import * as pdfjsLib from "pdfjs-dist/legacy/build/pdf";
 
-// Initialize PDF worker
 if (typeof window !== "undefined") {
-  pdfjsLib.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
+  pdfjsLib.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjsLib.version}/legacy/build/pdf.worker.min.mjs`;
 }
 
 interface ChatInputProps {
@@ -39,45 +39,34 @@ export default function ChatInput({
   const [attachments, setAttachments] = useState<any[]>([]);
   const [isListening, setIsListening] = useState(false);
   const [isExtracting, setIsExtracting] = useState(false);
+  const [showMenu, setShowMenu] = useState(false);
 
   const [isVoiceInput, setIsVoiceInput] = useState(true);
   const [isAudioOutput, setIsAudioOutput] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const imageInputRef = useRef<HTMLInputElement>(null);
 
+  // --- MAINTAIN ORIGINAL LOGIC: Effects for Storage & Speech ---
   useEffect(() => {
     const savedVoiceInput = localStorage.getItem("purple-voice-input");
     const savedAudioOutput = localStorage.getItem("purple-audio-output");
-
     if (savedVoiceInput !== null) setIsVoiceInput(JSON.parse(savedVoiceInput));
     if (savedAudioOutput !== null)
       setIsAudioOutput(JSON.parse(savedAudioOutput));
 
-    window.speechSynthesis.getVoices();
-    const handleVoicesChanged = () => window.speechSynthesis.getVoices();
-    window.speechSynthesis.addEventListener(
-      "voiceschanged",
-      handleVoicesChanged,
-    );
-
-    const checkSpeech = setInterval(() => {
-      setIsSpeaking(window.speechSynthesis.speaking);
-    }, 400);
-
-    return () => {
-      clearInterval(checkSpeech);
-      window.speechSynthesis.removeEventListener(
-        "voiceschanged",
-        handleVoicesChanged,
-      );
-    };
+    if (typeof window !== "undefined" && window.speechSynthesis) {
+      const checkSpeech = setInterval(() => {
+        setIsSpeaking(window.speechSynthesis.speaking);
+      }, 400);
+      return () => clearInterval(checkSpeech);
+    }
   }, []);
 
   useEffect(() => {
     localStorage.setItem("purple-voice-input", JSON.stringify(isVoiceInput));
   }, [isVoiceInput]);
-
   useEffect(() => {
     localStorage.setItem("purple-audio-output", JSON.stringify(isAudioOutput));
   }, [isAudioOutput]);
@@ -87,60 +76,74 @@ export default function ChatInput({
     setIsSpeaking(false);
   };
 
-  // --- NEW FEATURE: PDF TEXT EXTRACTION ---
   const extractTextFromPDF = async (file: File) => {
     const arrayBuffer = await file.arrayBuffer();
-    const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+    const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
+    const pdf = await loadingTask.promise;
     let fullText = "";
     for (let i = 1; i <= pdf.numPages; i++) {
       const page = await pdf.getPage(i);
       const textContent = await page.getTextContent();
-      const pageText = textContent.items.map((item: any) => item.str).join(" ");
-      fullText += pageText + "\n";
+      fullText +=
+        textContent.items.map((item: any) => item.str).join(" ") + "\n";
     }
     return fullText;
   };
 
-  const handleFileChange = async (e: ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = async (
+    e: ChangeEvent<HTMLInputElement>,
+    type: "file" | "image",
+  ) => {
     const files = e.target.files;
     if (!files) return;
     setIsExtracting(true);
+    setShowMenu(false);
     const newAttachments = [];
 
     for (const file of Array.from(files)) {
       try {
-        let extractedText = "";
-        // If PDF, extract text. If text-based, read directly.
-        if (file.type === "application/pdf") {
-          extractedText = await extractTextFromPDF(file);
+        if (type === "image") {
+          const reader = new FileReader();
+          const base64 = await new Promise((resolve) => {
+            reader.onload = () => resolve(reader.result);
+            reader.readAsDataURL(file);
+          });
+          newAttachments.push({
+            name: file.name,
+            type: file.type,
+            preview: base64,
+            isImage: true,
+            data: base64,
+          });
         } else {
-          extractedText = await file.text();
+          let text =
+            file.type === "application/pdf"
+              ? await extractTextFromPDF(file)
+              : await file.text();
+          newAttachments.push({
+            name: file.name,
+            type: file.type,
+            size: (file.size / 1024).toFixed(1) + " KB",
+            extractedText: text,
+            isImage: false,
+          });
         }
-
-        newAttachments.push({
-          name: file.name,
-          type: file.type,
-          size: (file.size / 1024).toFixed(1) + " KB",
-          extractedText: extractedText, // This is what ChatWindow needs!
-        });
       } catch (err) {
         toast.error(`Error reading ${file.name}`);
       }
     }
     setAttachments((prev) => [...prev, ...newAttachments]);
     setIsExtracting(false);
-    if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
   const startListening = () => {
     if (!isVoiceInput) return;
     const SpeechRecognition =
-      (window as any).SpeechRecognition || (window as any).webkitRecognition;
+      (window as any).SpeechRecognition ||
+      (window as any).webkitSpeechRecognition;
     if (!SpeechRecognition)
       return toast.error("Browser doesn't support Voice AI");
-
     const recognition = new SpeechRecognition();
-    recognition.lang = "en-US";
     recognition.onstart = () => setIsListening(true);
     recognition.onresult = (event: any) => {
       const transcript = event.results[0][0].transcript;
@@ -161,6 +164,7 @@ export default function ChatInput({
 
   return (
     <div className="p-4 bg-transparent relative z-20 max-w-4xl mx-auto w-full">
+      {/* 1. ORIGINAL CONTROL BAR */}
       <div className="flex justify-end gap-2 mb-3">
         <AnimatePresence>
           {isSpeaking && (
@@ -169,13 +173,12 @@ export default function ChatInput({
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.9, opacity: 0 }}
               onClick={stopSpeaking}
-              className="flex items-center gap-2 px-3 py-1.5 rounded-full text-[10px] font-bold uppercase bg-red-500 text-white shadow-lg shadow-red-500/20"
+              className="flex items-center gap-2 px-3 py-1.5 rounded-full text-[10px] font-bold bg-red-500 text-white shadow-lg shadow-red-500/20"
             >
               <Square size={12} fill="currentColor" /> Stop Reading
             </motion.button>
           )}
         </AnimatePresence>
-
         <button
           onClick={() => setIsAudioOutput(!isAudioOutput)}
           className={cn(
@@ -185,10 +188,9 @@ export default function ChatInput({
               : "bg-slate-100 dark:bg-white/5 border-slate-200 dark:border-white/10 text-slate-500",
           )}
         >
-          {isAudioOutput ? <Volume2 size={12} /> : <VolumeX size={12} />}
-          {isAudioOutput ? "Audio On" : "Silent Mode"}
+          {isAudioOutput ? <Volume2 size={12} /> : <VolumeX size={12} />}{" "}
+          {isAudioOutput ? "Audio On" : "Silent"}
         </button>
-
         <button
           onClick={() => setIsVoiceInput(!isVoiceInput)}
           className={cn(
@@ -198,51 +200,33 @@ export default function ChatInput({
               : "bg-slate-100 dark:bg-white/5 border-slate-200 dark:border-white/10 text-slate-500",
           )}
         >
-          {isVoiceInput ? <Mic size={12} /> : <MicOff size={12} />}
-          {isVoiceInput ? "Voice Input" : "Text Input"}
+          {isVoiceInput ? <Mic size={12} /> : <MicOff size={12} />}{" "}
+          {isVoiceInput ? "Voice Input" : "Text Only"}
         </button>
       </div>
 
-      <AnimatePresence>
-        {isListening && (
-          <motion.div
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0 }}
-            className="absolute inset-x-4 bottom-24 z-50 p-6 rounded-3xl bg-violet-600/90 backdrop-blur-xl flex flex-col items-center justify-center border border-white/20 shadow-2xl text-white"
-          >
-            <div className="flex gap-1.5 mb-2">
-              {[1, 2, 3, 4].map((i) => (
-                <motion.div
-                  key={i}
-                  animate={{ height: [10, 25, 10] }}
-                  transition={{
-                    repeat: Infinity,
-                    duration: 0.6,
-                    delay: i * 0.1,
-                  }}
-                  className="w-1 bg-white rounded-full"
-                />
-              ))}
-            </div>
-            <span className="text-[10px] font-bold uppercase tracking-widest">
-              Listening...
-            </span>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
+      {/* 2. INPUT BOX */}
       <div className="relative flex flex-col gap-2 p-2 rounded-[24px] border border-slate-200 dark:border-white/10 bg-white/80 dark:bg-slate-900/80 backdrop-blur-2xl shadow-2xl transition-all focus-within:border-violet-500/50">
+        {/* PREVIEWS (Restored and Added Image Support) */}
         <AnimatePresence>
           {attachments.length > 0 && (
-            <div className="flex flex-wrap gap-2 p-2 pb-0">
+            <div className="flex flex-wrap gap-2 p-2">
               {attachments.map((file, i) => (
-                <div
+                <motion.div
                   key={i}
-                  className="flex items-center gap-2 px-3 py-2 bg-slate-100 dark:bg-white/5 rounded-xl border border-slate-200 dark:border-white/10"
+                  initial={{ opacity: 0, scale: 0.9 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  className="relative group flex items-center gap-2 px-3 py-2 bg-slate-100 dark:bg-white/5 rounded-xl border border-slate-200 dark:border-white/10"
                 >
-                  <FileText size={14} className="text-emerald-500" />
-                  <span className="text-xs font-medium truncate max-w-[120px] dark:text-slate-300">
+                  {file.isImage ? (
+                    <img
+                      src={file.preview}
+                      className="h-6 w-6 rounded object-cover"
+                    />
+                  ) : (
+                    <FileText size={14} className="text-emerald-500" />
+                  )}
+                  <span className="text-xs font-medium truncate max-w-[100px] dark:text-slate-300">
                     {file.name}
                   </span>
                   <button
@@ -253,26 +237,59 @@ export default function ChatInput({
                   >
                     <X size={12} />
                   </button>
-                </div>
+                </motion.div>
               ))}
             </div>
           )}
         </AnimatePresence>
 
         <div className="flex items-end gap-2">
-          <button
-            onClick={() => fileInputRef.current?.click()}
-            className="p-3 text-slate-500 hover:text-violet-600 rounded-xl transition-all"
-          >
-            <Paperclip size={20} />
-          </button>
+          {/* THE NEW PLUS MENU BUTTON */}
+          <div className="relative pb-1">
+            <button
+              onClick={() => setShowMenu(!showMenu)}
+              className={cn(
+                "p-3 rounded-xl transition-all",
+                showMenu
+                  ? "bg-violet-600 text-white rotate-45 shadow-lg"
+                  : "text-slate-500 hover:bg-slate-100 dark:hover:bg-white/5",
+              )}
+            >
+              <Plus size={20} />
+            </button>
+            {showMenu && (
+              <div className="absolute bottom-full left-0 mb-4 w-44 bg-white dark:bg-slate-800 rounded-2xl shadow-2xl border border-slate-200 dark:border-white/10 overflow-hidden z-50">
+                <button
+                  onClick={() => imageInputRef.current?.click()}
+                  className="w-full flex items-center gap-3 px-4 py-3 text-sm hover:bg-slate-50 dark:hover:bg-white/5 text-slate-700 dark:text-slate-200"
+                >
+                  <ImageIcon size={16} className="text-blue-500" /> Image
+                </button>
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  className="w-full flex items-center gap-3 px-4 py-3 text-sm hover:bg-slate-50 dark:hover:bg-white/5 border-t border-slate-100 dark:border-white/5 text-slate-700 dark:text-slate-200"
+                >
+                  <Paperclip size={16} className="text-emerald-500" /> File
+                </button>
+              </div>
+            )}
+          </div>
+
           <input
             type="file"
             ref={fileInputRef}
-            onChange={handleFileChange}
+            onChange={(e) => handleFileChange(e, "file")}
             className="hidden"
             multiple
             accept=".pdf,.txt,.md,.js,.ts,.json"
+          />
+          <input
+            type="file"
+            ref={imageInputRef}
+            onChange={(e) => handleFileChange(e, "image")}
+            className="hidden"
+            multiple
+            accept="image/*"
           />
 
           <textarea
@@ -284,17 +301,14 @@ export default function ChatInput({
               (e.preventDefault(), handleSubmit())
             }
             placeholder={
-              isExtracting
-                ? "Purple is reading..."
-                : isVoiceInput
-                  ? "Speak or type..."
-                  : "Type a message..."
+              isExtracting ? "Purple is reading..." : "Type or speak..."
             }
             rows={1}
             disabled={disabled || isExtracting}
             className="flex-1 bg-transparent border-none focus:ring-0 resize-none py-3 px-1 text-[15px] dark:text-slate-100 max-h-[200px]"
           />
 
+          {/* 3. RESTORED ORIGINAL SEND & VOICE BUTTONS */}
           <div className="flex items-center gap-2 pr-1 pb-1">
             {isVoiceInput && (
               <button

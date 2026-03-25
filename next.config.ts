@@ -1,5 +1,15 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // --- NEW: LARGE FILE UPLOAD SUPPORT ---
+  // This unlocks the 1MB limit for the App Router
+  experimental: {
+    serverActions: {
+      bodySizeLimit: '20mb',
+    },
+    // This specifically helps with large Route Handler payloads (API routes)
+    proxyClientMaxBodySize: '20mb',
+  },
+
   // --- CRITICAL: FIX FOR PDF-PARSE & TURBOPACK ---
   // This tells Next.js not to bundle this library, 
   // preventing "Module not found" and "Export default" errors.

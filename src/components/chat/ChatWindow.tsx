@@ -20,13 +20,14 @@ import {
   VolumeX,
   Radio,
   Edit2,
-  Copy,
-  Check,
   X,
+  Check,
   Star,
   Download,
   ClipboardCheck,
-  FileJson, // Added for JSON export
+  FileJson,
+  LogOut,
+  Copy, // Added Copy icon
 } from "lucide-react";
 import { useState, useRef, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -106,7 +107,11 @@ const SUGGESTIONS = [
   },
 ];
 
-export default function ChatWindow() {
+interface ChatWindowProps {
+  onNewMessage?: (text: string) => void;
+}
+
+export default function ChatWindow({ onNewMessage }: ChatWindowProps) {
   const { setTheme, resolvedTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
   const [showModeMenu, setShowModeMenu] = useState(false);
@@ -129,6 +134,7 @@ export default function ChatWindow() {
     provider,
     togglePin,
     currentUser,
+    logout,
   } = useChatStore();
 
   const promptsLeft = maxLimit - usageCount;
@@ -157,13 +163,11 @@ export default function ChatWindow() {
     window.print();
   };
 
-  // NEW FEATURE: Export pinned messages as JSON
   const handleExportJSON = () => {
     if (!hasMessages) return;
     const pinnedContent = activeConv.messages.filter((m) => m.isPinned);
     const dataToExport =
       pinnedContent.length > 0 ? pinnedContent : activeConv.messages;
-
     const blob = new Blob([JSON.stringify(dataToExport, null, 2)], {
       type: "application/json",
     });
@@ -184,7 +188,6 @@ export default function ChatWindow() {
     if (!el) return;
     try {
       const type = "text/html";
-      // Refined to target the rendered text specifically
       const blob = new Blob([el.innerHTML], { type });
       const data = [new ClipboardItem({ [type]: blob })];
       await navigator.clipboard.write(data);
@@ -225,12 +228,20 @@ export default function ChatWindow() {
     setInput("");
     setIsTyping(true);
 
+    // --- ENHANCED PROMPT FOR PDF SUPPORT ---
     let finalPrompt = text;
     if (attachments && attachments.length > 0) {
-      const file = attachments[0];
-      finalPrompt = `\n[ATTACHED FILE CONTENT]\nFile Name: ${file.name}\n---\n${file.extractedText || "File loaded successfully."}\n---\nUser Question: ${text}`;
+      const contextBlocks = attachments
+        .map((file) =>
+          file.isImage
+            ? `[IMAGE ATTACHED]`
+            : `[FILE: ${file.name}]\n${file.extractedText || "No text content"}\n---`,
+        )
+        .join("\n");
+      finalPrompt = `Below are the contents of the attached files:\n${contextBlocks}\n\nUser Question: ${text}`;
     }
 
+    // Pass attachments to addMessage so they are stored in history
     await addMessage(currentId, "user", text, attachments);
 
     try {
@@ -243,7 +254,7 @@ export default function ChatWindow() {
           userContext: currentUser,
           messages: [
             ...(activeConv?.messages || []),
-            { role: "user", content: finalPrompt },
+            { role: "user", content: finalPrompt, attachments }, // Send attachments to API
           ],
         }),
       });
@@ -252,12 +263,20 @@ export default function ChatWindow() {
       if (!res.ok) throw new Error(data.message || "Engine Error");
 
       await addMessage(currentId, "assistant", data.text);
+      if (onNewMessage) onNewMessage(data.text);
       if (ttsEnabled) speakText(data.text);
     } catch (err: any) {
       toast.error("Purple Engine Error", { description: err.message });
     } finally {
       setIsTyping(false);
     }
+  };
+
+  const handleLogout = () => {
+    logout();
+    toast.success("Session Terminated", {
+      description: "You have been safely logged out.",
+    });
   };
 
   if (!mounted) return null;
@@ -321,11 +340,11 @@ export default function ChatWindow() {
             </AnimatePresence>
           </div>
         </div>
+
         <div className="flex items-center gap-1">
-          {/* NEW FEATURE: JSON Export Button */}
           <button
             onClick={handleExportJSON}
-            className="p-2 rounded-lg text-slate-400 hover:text-emerald-500 transition-colors"
+            className="p-2 rounded-lg text-slate-400 hover:text-emerald-500"
             title="Export Data"
           >
             <FileJson size={16} />
@@ -374,6 +393,14 @@ export default function ChatWindow() {
             className="p-2 text-slate-400 hover:text-red-500"
           >
             <Trash2 size={16} />
+          </button>
+          <div className="w-[1px] h-4 bg-slate-200 dark:bg-white/10 mx-1" />
+          <button
+            onClick={handleLogout}
+            className="p-2 text-slate-400 hover:text-orange-500 transition-colors"
+            title="Logout"
+          >
+            <LogOut size={16} />
           </button>
         </div>
       </header>
@@ -460,16 +487,29 @@ export default function ChatWindow() {
                       <User size={16} />
                     )}
                   </div>
+
                   <div
                     className={cn(
-                      "flex flex-col gap-3 max-w-[85%] relative",
+                      "flex flex-col gap-2 max-w-[85%] relative",
                       msg.role === "user" ? "items-end" : "items-start",
                     )}
                   >
+                    {/* VISION: Display uploaded images if they exist in message attachments */}
+                    {msg.attachments
+                      ?.filter((a: any) => a.isImage)
+                      .map((img: any, idx: number) => (
+                        <img
+                          key={idx}
+                          src={img.data}
+                          className="max-w-[250px] rounded-2xl mb-2 border border-slate-200 dark:border-white/10 shadow-md"
+                          alt="User upload"
+                        />
+                      ))}
+
                     <div
                       id={`msg-${msg.id}`}
                       className={cn(
-                        "px-6 py-4 rounded-3xl text-[14.5px] border shadow-sm transition-all prose prose-slate dark:prose-invert max-w-none",
+                        "px-6 py-4 rounded-3xl text-[14.5px] border shadow-sm transition-all prose prose-slate dark:prose-invert max-w-none relative",
                         msg.role === "user"
                           ? "bg-violet-600 border-violet-500 text-white rounded-tr-none prose-headings:text-white prose-p:text-white"
                           : "bg-white dark:bg-slate-900 border-slate-100 dark:border-white/5 text-slate-800 dark:text-slate-200 rounded-tl-none",
@@ -480,29 +520,23 @@ export default function ChatWindow() {
                           <textarea
                             value={editBuffer}
                             onChange={(e) => setEditBuffer(e.target.value)}
-                            className="w-full bg-transparent border-none focus:ring-0 text-sm resize-none outline-none"
+                            className="w-full bg-transparent border-none focus:ring-0 text-sm resize-none outline-none text-white"
                             autoFocus
                             rows={3}
                           />
                           <div className="flex justify-end gap-2 border-t border-white/20 pt-2">
                             <button
                               onClick={() => setEditingMessageId(null)}
-                              className="p-1 hover:text-red-300 transition-colors"
+                              className="p-1 hover:text-red-300"
                             >
                               <X size={14} />
                             </button>
                             <button
                               onClick={() => {
-                                activeConv.messages = activeConv.messages.slice(
-                                  0,
-                                  activeConv.messages.findIndex(
-                                    (m) => m.id === msg.id,
-                                  ),
-                                );
-                                setEditingMessageId(null);
                                 handleSend(editBuffer);
+                                setEditingMessageId(null);
                               }}
-                              className="p-1 hover:text-emerald-300 transition-colors"
+                              className="p-1 hover:text-emerald-300"
                             >
                               <Check size={14} />
                             </button>
@@ -514,36 +548,43 @@ export default function ChatWindow() {
                         </ReactMarkdown>
                       )}
                     </div>
-                    {!editingMessageId && (
-                      <div
-                        className={cn(
-                          "flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity absolute -top-1 print:hidden",
-                          msg.role === "user"
-                            ? "right-full mr-2"
-                            : "left-full ml-2",
-                        )}
+
+                    {/* ACTION BAR: Copy, Edit, and Speak buttons */}
+                    <div
+                      className={cn(
+                        "flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity mt-1 px-2",
+                        msg.role === "user" ? "flex-row-reverse" : "flex-row",
+                      )}
+                    >
+                      <button
+                        onClick={() => copyFormattedText(msg.id)}
+                        className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-white/5 text-slate-400 transition-colors"
+                        title="Copy Message"
                       >
-                        <button
-                          onClick={() => copyFormattedText(msg.id)}
-                          className="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-500 hover:text-violet-500 shadow-sm border border-slate-200 dark:border-white/10 transition-all"
-                          title="Copy Formatted"
-                        >
-                          <ClipboardCheck size={12} />
-                        </button>
+                        <Copy size={14} />
+                      </button>
+                      {msg.role === "user" && (
                         <button
                           onClick={() => {
                             setEditingMessageId(msg.id);
                             setEditBuffer(msg.content);
                           }}
-                          className={cn(
-                            "p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-500 hover:text-violet-500 shadow-sm border border-slate-200 dark:border-white/10 transition-all",
-                            msg.role !== "user" && "hidden",
-                          )}
+                          className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-white/5 text-slate-400 transition-colors"
+                          title="Edit Message"
                         >
-                          <Edit2 size={12} />
+                          <Edit2 size={14} />
                         </button>
-                      </div>
-                    )}
+                      )}
+                      {msg.role === "assistant" && (
+                        <button
+                          onClick={() => speakText(msg.content)}
+                          className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-white/5 text-slate-400 transition-colors"
+                          title="Speak Message"
+                        >
+                          <Volume2 size={14} />
+                        </button>
+                      )}
+                    </div>
                   </div>
                 </motion.div>
               ))}

@@ -30,7 +30,6 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    // suppressHydrationWarning is THE permanent solution for next-themes
     <html lang="en" suppressHydrationWarning>
       <body
         className={`${outfit.variable} ${jetbrains.variable} font-sans antialiased bg-white dark:bg-slate-950 transition-colors duration-300`}
@@ -41,7 +40,14 @@ export default function RootLayout({
           enableSystem
           disableTransitionOnChange
         >
-          {children}
+          {/* We removed the Sidebar from here. 
+              The 'children' (which is your page.tsx) will now 
+              handle the sidebar and main content layout itself.
+          */}
+          <div className="h-screen w-full overflow-hidden">
+            {children}
+          </div>
+
           <Toaster position="top-center" richColors closeButton />
         </ThemeProvider>
       </body>
