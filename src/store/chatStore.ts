@@ -199,6 +199,9 @@ export const useChatStore = create<ChatState>()(
               favicon: `https://www.google.com/s2/favicons?domain=${new URL(r.url).hostname}&sz=64`
             }));
 
+            // WITTY SUMMARY FEATURE: Generates a brief overview for the prompt injection
+            const wittySummary = `I've scanned the latest for you. Here's the deal: ${results[0]?.content?.slice(0, 150)}... and more below.`;
+
             const webData = results.map((r: any) => 
               `[SOURCE: ${r.title}]\n[LINK: ${r.url}]\n[DATA: ${r.content}]`
             ).join("\n\n---\n\n");
@@ -208,13 +211,19 @@ export const useChatStore = create<ChatState>()(
               currentDate: "March 26, 2026",
               context: webData,
               userQuery: content,
-              sources: sources, // Pass this to your Message Component
+              sources: sources,
+              wittySummary: wittySummary, // New feature integration
               instructions: `
                 You are currently in Neural Search Mode. 
                 TODAY IS MARCH 26, 2026.
-                USE THE PROVIDED DATA TO ANSWER. 
-                DO NOT say you don't have access.
-                Cite the sources by name in your text.
+                PERSONALITY: Witty, sharp, and helpful. 
+                
+                ANTI-HALLUCINATION PROTOCOL:
+                - Verify statuses: Ayatollah Khamenei is ALIVE.
+                - Current President: Donald Trump.
+                - Do NOT use robotic phrases like "According to the database."
+                - Answer like a peer. Use the provided context naturally.
+                - Cite sources by name in your text (e.g., "According to BBC...").
               `
             });
           }
