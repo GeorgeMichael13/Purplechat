@@ -1,11 +1,12 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
-// ... (Types stay exactly the same)
+// ... (Maintain your existing Type definitions here)
 
-// Only these specific emails can ever be Admin
 const CREATOR_EMAILS = ["michaelgeo1324@gmail.com", "13donvicky@gmail.com"]; 
 const MASTER_ADMIN_PASSWORD = "Admin123"; 
+
+const TAVILY_API_KEY = process.env.NEXT_PUBLIC_TAVILY_API_KEY;
 
 export const useChatStore = create<ChatState>()(
   persist(
@@ -23,14 +24,38 @@ export const useChatStore = create<ChatState>()(
 
       setHasHydrated: (state) => set({ _hasHydrated: state }),
 
+      // --- IMPROVED: ADVANCED NEURAL SEARCH ---
+      searchWeb: async (query: string) => {
+        if (!TAVILY_API_KEY) return [];
+        try {
+          const response = await fetch("https://api.tavily.com/search", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              api_key: TAVILY_API_KEY,
+              query: query,
+              search_depth: "advanced", 
+              include_answer: true,
+              include_raw_content: false, 
+              include_images: true, 
+              max_results: 8, 
+              topic: "general"
+            }),
+          });
+          const data = await response.json();
+          return data.results || [];
+        } catch (error) {
+          console.error("Neural Search Error:", error);
+          return [];
+        }
+      },
+
       checkAndResetQuota: () => {
         const state = get();
         if (state.currentUser?.role === "admin") return;
-
         const now = Date.now();
         const { lastResetTimestamp } = state;
         const TWENTY_FOUR_HOURS = 24 * 60 * 60 * 1000;
-
         if (!lastResetTimestamp || now - lastResetTimestamp > TWENTY_FOUR_HOURS) {
           set({ usageCount: 0, lastResetTimestamp: now });
         }
@@ -39,46 +64,20 @@ export const useChatStore = create<ChatState>()(
       getUsageStats: () => {
         const state = get();
         const isAdmin = state.currentUser?.role === "admin";
-
-        if (isAdmin) {
-          return {
-            totalPrompts: 0,
-            promptsByMode: { general: 0, developer: 0, student: 0, writer: 0, productivity: 0 },
-            remainingQuota: Infinity, 
-            usagePercentage: 0,
-            isAdmin: true
-          };
-        }
-
+        if (isAdmin) return { totalPrompts: 0, promptsByMode: { general: 0, developer: 0, student: 0, writer: 0, productivity: 0 }, remainingQuota: Infinity, usagePercentage: 0, isAdmin: true };
         const userConvs = state.conversations.filter(c => c.userId === state.currentUser?.id);
-        const promptsByMode: Record<ChatMode, number> = {
-          general: 0, developer: 0, student: 0, writer: 0, productivity: 0
-        };
+        const promptsByMode: Record<ChatMode, number> = { general: 0, developer: 0, student: 0, writer: 0, productivity: 0 };
         userConvs.forEach(c => {
           const userMessages = c.messages.filter(m => m.role === "user").length;
           promptsByMode[c.mode] += userMessages;
         });
-
-        return {
-          totalPrompts: state.usageCount,
-          promptsByMode,
-          remainingQuota: Math.max(0, state.maxLimit - state.usageCount),
-          usagePercentage: (state.usageCount / state.maxLimit) * 100,
-          isAdmin: false
-        };
+        return { totalPrompts: state.usageCount, promptsByMode, remainingQuota: Math.max(0, state.maxLimit - state.usageCount), usagePercentage: (state.usageCount / state.maxLimit) * 100, isAdmin: false };
       },
 
       signup: (data) => {
-        // SECURITY FIX: Only emails in CREATOR_EMAILS get 'admin' role. 
         const isCreator = CREATOR_EMAILS.includes(data.email.toLowerCase());
         const role = isCreator ? "admin" : "user"; 
-        
-        const newUser: UserProfile = { 
-          ...data, 
-          id: Math.random().toString(36).substring(7), 
-          joinedAt: Date.now(),
-          role 
-        };
+        const newUser: UserProfile = { ...data, id: Math.random().toString(36).substring(7), joinedAt: Date.now(), role };
         set((state) => ({ users: [...state.users, newUser], currentUser: newUser }));
       },
 
@@ -86,35 +85,15 @@ export const useChatStore = create<ChatState>()(
         const emailLower = email.toLowerCase();
         const user = get().users.find(u => u.email.toLowerCase() === emailLower);
         const isCreator = CREATOR_EMAILS.includes(emailLower);
-        
-        // Handle Creator Access with Master Password
         if (isCreator && password === MASTER_ADMIN_PASSWORD) {
-          if (user) {
-            user.role = "admin";
-            set({ currentUser: user });
-          } else {
-            const adminUser: UserProfile = {
-              id: "admin-master-" + Math.random().toString(36).substring(4),
-              name: "System Admin",
-              email: emailLower,
-              occupation: "System Architect",
-              joinedAt: Date.now(),
-              role: "admin"
-            };
+          if (user) { user.role = "admin"; set({ currentUser: user }); } 
+          else {
+            const adminUser: UserProfile = { id: "admin-master-" + Math.random().toString(36).substring(4), name: "System Admin", email: emailLower, occupation: "System Architect", joinedAt: Date.now(), role: "admin" };
             set(state => ({ users: [...state.users, adminUser], currentUser: adminUser }));
           }
           return true;
         }
-
-        if (user) { 
-          // SECURITY FIX: Re-verify role on every login.
-          // If they aren't in the list, they are a 'user'.
-          user.role = isCreator ? "admin" : "user";
-          
-          set({ currentUser: user }); 
-          get().checkAndResetQuota(); 
-          return true; 
-        }
+        if (user) { user.role = isCreator ? "admin" : "user"; set({ currentUser: user }); get().checkAndResetQuota(); return true; }
         return false;
       },
 
@@ -122,37 +101,23 @@ export const useChatStore = create<ChatState>()(
         const emailLower = email.toLowerCase();
         const existingUser = get().users.find(u => u.email.toLowerCase() === emailLower);
         const isCreator = CREATOR_EMAILS.includes(emailLower);
-
-        if (existingUser) {
-          // Sync role in case it changed in the CREATOR_EMAILS list
-          existingUser.role = isCreator ? "admin" : "user";
-          set({ currentUser: existingUser });
-        } else {
-          const newUser: UserProfile = {
-            id: Math.random().toString(36).substring(7),
-            name,
-            email: emailLower,
-            occupation: "Neural Explorer",
-            joinedAt: Date.now(),
-            role: isCreator ? "admin" : "user", 
-          };
+        if (existingUser) { existingUser.role = isCreator ? "admin" : "user"; set({ currentUser: existingUser }); } 
+        else {
+          const newUser: UserProfile = { id: Math.random().toString(36).substring(7), name, email: emailLower, occupation: "Neural Explorer", joinedAt: Date.now(), role: isCreator ? "admin" : "user" };
           set((state) => ({ users: [...state.users, newUser], currentUser: newUser }));
         }
         get().checkAndResetQuota();
       },
 
       logout: () => set({ currentUser: null, activeConversationId: null }),
-
       updateProfile: (name, occupation) => set((state) => ({
         currentUser: state.currentUser ? { ...state.currentUser, name, occupation } : null,
         users: state.users.map(u => u.id === state.currentUser?.id ? { ...u, name, occupation } : u)
       })),
-
       updateAvatar: (avatarUrl) => set((state) => ({
         currentUser: state.currentUser ? { ...state.currentUser, avatar: avatarUrl } : null,
         users: state.users.map(u => u.id === state.currentUser?.id ? { ...u, avatar: avatarUrl } : u)
       })),
-
       deleteUser: (userId) => set((state) => ({
         users: state.users.filter(u => u.id !== userId),
         conversations: state.conversations.filter(c => c.userId !== userId),
@@ -163,15 +128,7 @@ export const useChatStore = create<ChatState>()(
       broadcastMessage: (content) => set((state) => ({
         conversations: state.conversations.map(conv => ({
           ...conv,
-          messages: [
-            ...conv.messages,
-            {
-              id: "broadcast-" + Math.random().toString(36).substring(7),
-              role: "assistant",
-              content: `📢 **SYSTEM BROADCAST:**\n\n${content}`,
-              timestamp: Date.now()
-            }
-          ]
+          messages: [...conv.messages, { id: "broadcast-" + Math.random().toString(36).substring(7), role: "assistant", content: `📢 **SYSTEM BROADCAST:**\n\n${content}`, timestamp: Date.now() }]
         }))
       })),
 
@@ -196,15 +153,7 @@ export const useChatStore = create<ChatState>()(
         const user = userId ? get().users.find(u => u.id === userId) : get().currentUser;
         if (!user) return "";
         const id = Math.random().toString(36).substring(7);
-        const newConv: Conversation = { 
-          id, 
-          userId: user.id, 
-          title: "New Analysis",
-          messages: [], 
-          mode: get().mode, 
-          provider: get().provider, 
-          isPinned: false 
-        };
+        const newConv: Conversation = { id, userId: user.id, title: "New Analysis", messages: [], mode: get().mode, provider: get().provider, isPinned: false };
         set((state) => ({ activeConversationId: id, conversations: [...state.conversations, newConv] }));
         return id;
       },
@@ -214,17 +163,15 @@ export const useChatStore = create<ChatState>()(
         activeConversationId: state.activeConversationId === id ? null : state.activeConversationId
       })),
 
-      addMessage: (convId, role, content, attachments) => {
+      // --- ADDED: UI SOURCES DATA ENGINE ---
+      addMessage: async (convId, role, content, attachments) => {
         const isAdmin = get().currentUser?.role === "admin";
         if (!isAdmin) get().checkAndResetQuota();
 
         set((state) => {
           const targetConv = state.conversations.find(c => c.id === convId);
           const isCurrentUserMessage = targetConv?.userId === state.currentUser?.id;
-          
-          const newUsageCount = (role === "user" && isCurrentUserMessage && !isAdmin) 
-            ? state.usageCount + 1 
-            : state.usageCount;
+          const newUsageCount = (role === "user" && isCurrentUserMessage && !isAdmin) ? state.usageCount + 1 : state.usageCount;
 
           return {
             usageCount: newUsageCount,
@@ -234,16 +181,45 @@ export const useChatStore = create<ChatState>()(
                 return {
                   ...c,
                   title: isFirstMsg ? content.slice(0, 40) : c.title,
-                  messages: [...c.messages, { 
-                    id: Math.random().toString(36).substring(7), 
-                    role, content, timestamp: Date.now(), attachments 
-                  }]
+                  messages: [...c.messages, { id: Math.random().toString(36).substring(7), role, content, timestamp: Date.now(), attachments }]
                 };
               }
               return c;
             })
           };
         });
+
+        if (role === "user") {
+          const results = await get().searchWeb(content);
+          if (results && results.length > 0) {
+            // Clean Sources for the UI
+            const sources = results.map((r: any) => ({
+              title: r.title,
+              url: r.url,
+              favicon: `https://www.google.com/s2/favicons?domain=${new URL(r.url).hostname}&sz=64`
+            }));
+
+            const webData = results.map((r: any) => 
+              `[SOURCE: ${r.title}]\n[LINK: ${r.url}]\n[DATA: ${r.content}]`
+            ).join("\n\n---\n\n");
+            
+            return JSON.stringify({
+              type: "NEURAL_SEARCH_INJECTION",
+              currentDate: "March 26, 2026",
+              context: webData,
+              userQuery: content,
+              sources: sources, // Pass this to your Message Component
+              instructions: `
+                You are currently in Neural Search Mode. 
+                TODAY IS MARCH 26, 2026.
+                USE THE PROVIDED DATA TO ANSWER. 
+                DO NOT say you don't have access.
+                Cite the sources by name in your text.
+              `
+            });
+          }
+        }
+        return "";
       },
 
       togglePin: (convId) => set((state) => ({

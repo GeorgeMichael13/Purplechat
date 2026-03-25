@@ -28,6 +28,7 @@ import {
   LogOut,
   Copy,
   MoreVertical,
+  ExternalLink,
 } from "lucide-react";
 import { useState, useRef, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -37,6 +38,46 @@ import remarkGfm from "remark-gfm";
 import { useTheme } from "next-themes";
 import { toast } from "sonner";
 import ChatInput from "./ChatInput";
+
+// --- NEW SUB-COMPONENT: NEURAL SOURCES ---
+const NeuralSources = ({ sources }: { sources: any[] }) => {
+  if (!sources || sources.length === 0) return null;
+  return (
+    <div className="mt-3 pt-3 border-t border-slate-100 dark:border-white/5 w-full">
+      <div className="flex items-center gap-2 mb-2">
+        <div className="w-1.5 h-1.5 rounded-full bg-violet-500 animate-pulse" />
+        <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+          Knowledge Sources
+        </span>
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+        {sources.map((source, idx) => (
+          <a
+            key={idx}
+            href={source.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-2 p-2 rounded-xl bg-slate-50 dark:bg-white/5 border border-slate-100 dark:border-white/5 hover:border-violet-500/50 transition-all group"
+          >
+            <img
+              src={source.favicon}
+              alt=""
+              className="w-4 h-4 rounded-sm"
+              onError={(e) => (e.currentTarget.style.display = "none")}
+            />
+            <span className="text-[11px] font-medium text-slate-600 dark:text-slate-300 truncate flex-1">
+              {source.title}
+            </span>
+            <ExternalLink
+              size={10}
+              className="text-slate-400 group-hover:text-violet-500"
+            />
+          </a>
+        ))}
+      </div>
+    </div>
+  );
+};
 
 const MODES = [
   {
@@ -207,7 +248,8 @@ export default function ChatWindow({ onNewMessage }: ChatWindowProps) {
     setInput("");
     setIsTyping(true);
 
-    await addMessage(currentId, "user", text, attachments);
+    // Call addMessage which now might return an injection string
+    const injection = await addMessage(currentId, "user", text, attachments);
 
     try {
       const res = await fetch("/api/chat", {
@@ -219,7 +261,11 @@ export default function ChatWindow({ onNewMessage }: ChatWindowProps) {
           userContext: currentUser,
           messages: [
             ...(activeConv?.messages || []),
-            { role: "user", content: text, attachments },
+            {
+              role: "user",
+              content: injection || text, // Send the search context if it exists
+              attachments,
+            },
           ],
         }),
       });
@@ -456,68 +502,90 @@ export default function ChatWindow({ onNewMessage }: ChatWindowProps) {
             </motion.div>
           ) : (
             <div className="space-y-8 max-w-4xl mx-auto">
-              {activeConv.messages.map((msg) => (
-                <motion.div
-                  key={msg.id}
-                  className={cn(
-                    "flex items-start gap-3 w-full",
-                    msg.role === "user" ? "flex-row-reverse" : "flex-row",
-                  )}
-                >
-                  <div
+              {activeConv.messages.map((msg) => {
+                // --- PARSE INJECTION LOGIC ---
+                const isInjection = msg.content.startsWith(
+                  '{"type":"NEURAL_SEARCH_INJECTION"',
+                );
+                let displayContent = msg.content;
+                let sources = [];
+
+                if (isInjection) {
+                  try {
+                    const parsed = JSON.parse(msg.content);
+                    displayContent = parsed.userQuery;
+                    sources = parsed.sources || [];
+                  } catch (e) {}
+                }
+
+                return (
+                  <motion.div
+                    key={msg.id}
                     className={cn(
-                      "w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 mt-1",
-                      msg.role === "assistant"
-                        ? currentMode.bg + " text-white"
-                        : "bg-slate-100 dark:bg-slate-800 text-slate-500",
-                    )}
-                  >
-                    {msg.role === "assistant" && isSpeaking ? (
-                      <Radio size={16} className="animate-pulse" />
-                    ) : msg.role === "assistant" ? (
-                      <currentMode.icon size={16} />
-                    ) : (
-                      <User size={16} />
-                    )}
-                  </div>
-                  <div
-                    className={cn(
-                      "flex flex-col gap-1 max-w-[88%]",
-                      msg.role === "user" ? "items-end" : "items-start",
+                      "flex items-start gap-3 w-full",
+                      msg.role === "user" ? "flex-row-reverse" : "flex-row",
                     )}
                   >
                     <div
-                      id={`msg-${msg.id}`}
                       className={cn(
-                        "px-5 py-3 rounded-2xl text-[14px] border shadow-sm prose prose-slate dark:prose-invert max-w-none",
-                        msg.role === "user"
-                          ? "bg-violet-600 border-violet-500 text-white rounded-tr-none prose-p:text-white"
-                          : "bg-white dark:bg-slate-900 border-slate-100 dark:border-white/5 text-slate-800 dark:text-slate-200 rounded-tl-none",
+                        "w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 mt-1",
+                        msg.role === "assistant"
+                          ? currentMode.bg + " text-white"
+                          : "bg-slate-100 dark:bg-slate-800 text-slate-500",
                       )}
                     >
-                      <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                        {msg.content}
-                      </ReactMarkdown>
-                    </div>
-                    <div className="flex items-center gap-3 mt-1 opacity-60 hover:opacity-100 transition-opacity">
-                      <button
-                        onClick={() => copyFormattedText(msg.id)}
-                        className="text-slate-400 hover:text-violet-500"
-                      >
-                        <Copy size={14} />
-                      </button>
-                      {msg.role === "assistant" && (
-                        <button
-                          onClick={() => speakText(msg.content)}
-                          className="text-slate-400 hover:text-violet-500"
-                        >
-                          <Volume2 size={14} />
-                        </button>
+                      {msg.role === "assistant" && isSpeaking ? (
+                        <Radio size={16} className="animate-pulse" />
+                      ) : msg.role === "assistant" ? (
+                        <currentMode.icon size={16} />
+                      ) : (
+                        <User size={16} />
                       )}
                     </div>
-                  </div>
-                </motion.div>
-              ))}
+                    <div
+                      className={cn(
+                        "flex flex-col gap-1 max-w-[88%]",
+                        msg.role === "user" ? "items-end" : "items-start",
+                      )}
+                    >
+                      <div
+                        id={`msg-${msg.id}`}
+                        className={cn(
+                          "px-5 py-3 rounded-2xl text-[14px] border shadow-sm prose prose-slate dark:prose-invert max-w-none",
+                          msg.role === "user"
+                            ? "bg-violet-600 border-violet-500 text-white rounded-tr-none prose-p:text-white"
+                            : "bg-white dark:bg-slate-900 border-slate-100 dark:border-white/5 text-slate-800 dark:text-slate-200 rounded-tl-none",
+                        )}
+                      >
+                        <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                          {displayContent}
+                        </ReactMarkdown>
+
+                        {/* Render Sources if they exist in the message object */}
+                        {sources.length > 0 && (
+                          <NeuralSources sources={sources} />
+                        )}
+                      </div>
+                      <div className="flex items-center gap-3 mt-1 opacity-60 hover:opacity-100 transition-opacity">
+                        <button
+                          onClick={() => copyFormattedText(msg.id)}
+                          className="text-slate-400 hover:text-violet-500"
+                        >
+                          <Copy size={14} />
+                        </button>
+                        {msg.role === "assistant" && (
+                          <button
+                            onClick={() => speakText(msg.content)}
+                            className="text-slate-400 hover:text-violet-500"
+                          >
+                            <Volume2 size={14} />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </motion.div>
+                );
+              })}
             </div>
           )}
         </AnimatePresence>
