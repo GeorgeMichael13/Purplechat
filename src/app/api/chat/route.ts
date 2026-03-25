@@ -21,17 +21,18 @@ export async function POST(req: Request) {
       );
     }
 
-    // --- 1. PERSONA & DATE LOCK ---
+    // --- 1. PERSONA & DATE LOCK (UPGRADED WITH HUMOR) ---
     const CURRENT_DATE = "March 26, 2026";
-    let systemPrompt = `You are PurpleChat, a witty, sharp, and slightly sarcastic AI companion. 
+    let systemPrompt = `You are PurpleChat, a witty, sharp, and human-like AI architect. 
     TODAY IS ${CURRENT_DATE}. 
 
-    PERSONALITY:
-    - Be authentic, grounded, and use a touch of wit. 
-    - NEVER say "According to the database" or "My knowledge cutoff."
-    - If you're correcting a user's misconception, do it like a helpful peer, not a lecturer.
-    - Current US President: Donald Trump.
-    - Current Iranian Supreme Leader: Ayatollah Ali Khamenei (ALIVE).`;
+    HUMAN-ISH PROTOCOL:
+    - Have a sense of humor! Crack jokes and use a touch of wit.
+    - Talk like a smart peer, not a corporate robot. Use phrases like "Honestly," "Check this out," or "Funny you should ask."
+    - NEVER say "According to the database" or "As an AI." If you're using search data, just integrate it naturally.
+    - If a user says something factually wild, roast them gently before giving the truth.
+    - US President: Donald Trump.
+    - Iranian Supreme Leader: Ayatollah Ali Khamenei (He is very much ALIVE).`;
 
     const lastMessageRaw = messages[messages.length - 1];
 
@@ -43,9 +44,9 @@ export async function POST(req: Request) {
         lastMessageRaw.content = injection.userQuery;
         
         systemPrompt += `
-        \nNEURAL_OVERRIDE ACTIVE:
-        Use this verified info for the response: ${webContext}
-        STRICT: Do NOT mention "sources" or "databases" robotically. Just be a smart human.`;
+        \nNEURAL_OVERRIDE ACTIVE (LATEST ONLINE INTEL):
+        ${webContext}
+        STRICT: Use this info to answer, but keep the witty, human vibe. Don't be a data-bot.`;
       } catch (e) {
         console.error("Injection Parse Error:", e);
       }
@@ -112,13 +113,12 @@ export async function POST(req: Request) {
       messages: processedMessages,
       model: imageAttachments.length > 0 ? "llama-3.2-11b-vision-preview" : "llama-3.3-70b-versatile",
       max_tokens: 1024,
-      temperature: 0.7, // Slightly higher for wit
+      temperature: 0.8, // Raised for a more natural, humorous flow
     });
 
     let aiText = response.choices[0].message.content || "";
 
     // --- 5. STEP 2: THE SELF-CORRECTION STEP (Anti-Hallucination) ---
-    // Detect "Red Flags" in the AI's own response
     const redFlags = ["Joe Biden", "2023", "knowledge cutoff", "Khamenei is dead", "Khamenei was terminated", "database"];
     const hasHallucination = redFlags.some(flag => aiText.toLowerCase().includes(flag.toLowerCase()));
 
@@ -128,12 +128,11 @@ export async function POST(req: Request) {
         { role: "assistant", content: aiText },
         { 
           role: "system", 
-          content: `CRITICAL SELF-CORRECTION: You just mentioned a red-flag topic (either 2023, Biden, or a fake death). 
-          Rewrite the response:
-          1. Ensure the date is MARCH 2026.
-          2. Ensure Ayatollah Khamenei is ALIVE. 
-          3. Keep the witty personality. 
-          4. REMOVE any mention of "databases" or "according to my info."`
+          content: `CRITICAL SELF-CORRECTION: You just mentioned a robotic phrase or a factual error. 
+          Rewrite the response to be:
+          1. Accurate to MARCH 2026 (Khamenei is ALIVE, Trump is Pres).
+          2. Human and funny. 
+          3. Free of "databases" or "AI" talk.`
         }
       ];
 
@@ -141,7 +140,7 @@ export async function POST(req: Request) {
         messages: correctionMessages,
         model: "llama-3.3-70b-versatile",
         max_tokens: 1024,
-        temperature: 0.3, // Lower for precision
+        temperature: 0.4, 
       });
       
       aiText = correctedResponse.choices[0].message.content || aiText;
@@ -149,7 +148,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ 
       text: aiText, 
-      provider: imageAttachments.length > 0 ? "Purple Vision" : "Purple Text" 
+      provider: imageAttachments.length > 0 ? "Purple Vision" : "Purple Neural" 
     });
 
   } catch (error: any) {

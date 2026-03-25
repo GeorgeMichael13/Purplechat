@@ -163,7 +163,7 @@ export const useChatStore = create<ChatState>()(
         activeConversationId: state.activeConversationId === id ? null : state.activeConversationId
       })),
 
-      // --- ADDED: UI SOURCES DATA ENGINE ---
+      // --- ADDED: UI SOURCES DATA ENGINE WITH HUMOR ---
       addMessage: async (convId, role, content, attachments) => {
         const isAdmin = get().currentUser?.role === "admin";
         if (!isAdmin) get().checkAndResetQuota();
@@ -192,18 +192,17 @@ export const useChatStore = create<ChatState>()(
         if (role === "user") {
           const results = await get().searchWeb(content);
           if (results && results.length > 0) {
-            // Clean Sources for the UI
             const sources = results.map((r: any) => ({
               title: r.title,
               url: r.url,
               favicon: `https://www.google.com/s2/favicons?domain=${new URL(r.url).hostname}&sz=64`
             }));
 
-            // WITTY SUMMARY FEATURE: Generates a brief overview for the prompt injection
-            const wittySummary = `I've scanned the latest for you. Here's the deal: ${results[0]?.content?.slice(0, 150)}... and more below.`;
+            // WITTY SUMMARY: A quick "human-ish" lead-in
+            const wittySummary = `Alright, I've done some digging through the interwebs. Here's the tea: ${results[0]?.content?.slice(0, 150)}...`;
 
             const webData = results.map((r: any) => 
-              `[SOURCE: ${r.title}]\n[LINK: ${r.url}]\n[DATA: ${r.content}]`
+              `[ONLINE INTEL SOURCE: ${r.title}]\n[DATA: ${r.content}]`
             ).join("\n\n---\n\n");
             
             return JSON.stringify({
@@ -212,18 +211,14 @@ export const useChatStore = create<ChatState>()(
               context: webData,
               userQuery: content,
               sources: sources,
-              wittySummary: wittySummary, // New feature integration
+              wittySummary: wittySummary,
               instructions: `
-                You are currently in Neural Search Mode. 
-                TODAY IS MARCH 26, 2026.
-                PERSONALITY: Witty, sharp, and helpful. 
-                
-                ANTI-HALLUCINATION PROTOCOL:
-                - Verify statuses: Ayatollah Khamenei is ALIVE.
-                - Current President: Donald Trump.
-                - Do NOT use robotic phrases like "According to the database."
-                - Answer like a peer. Use the provided context naturally.
-                - Cite sources by name in your text (e.g., "According to BBC...").
+                1. You are PurpleChat. PERSONALITY: Sharp, witty, and slightly sarcastic.
+                2. Use the [ONLINE INTEL] provided above to answer—it's fresh from 2026.
+                3. Crack jokes! If the user's question is weird, roast it gently.
+                4. Talk like a human peer, not a corporate robot. Use phrases like "Actually," "Check this out," or "Funny enough."
+                5. ANTI-HALLUCINATION: Ayatollah Khamenei is ALIVE. Donald Trump is President. Do not let rumors from the context trip you up.
+                6. Cite your sources by name naturally (e.g., "Per The New York Times...").
               `
             });
           }
