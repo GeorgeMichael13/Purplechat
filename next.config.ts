@@ -1,17 +1,19 @@
-/** @type {import('next').NextConfig} */
-const nextConfig = {
-  // --- NEW: LARGE FILE UPLOAD SUPPORT ---
-  // This unlocks the 1MB limit for the App Router
-  experimental: {
-    serverActions: {
-      bodySizeLimit: '20mb',
+import type { NextConfig } from 'next';
+
+const nextConfig: NextConfig = {
+  // --- STABLE TOP-LEVEL KEYS (Next.js 16+) ---
+  serverExternalPackages: ["pdf-parse"],
+  
+  // --- TURBOPACK CONFIG ---
+  // Moved out of experimental to be a top-level key
+  turbopack: {
+    resolveAlias: {
+      canvas: 'false',
+      encoding: 'false',
     },
-    // This specifically helps with large Route Handler payloads (API routes)
-    proxyClientMaxBodySize: '20mb',
   },
 
-  // --- ADJUSTMENT: BYPASS BUILD ERRORS ---
-  // This allows the build to complete even if libraries have type conflicts
+  // --- BUILD & LINT SETTINGS ---
   typescript: {
     ignoreBuildErrors: true,
   },
@@ -19,26 +21,28 @@ const nextConfig = {
     ignoreDuringBuilds: true,
   },
 
-  // --- CRITICAL: FIX FOR PDF-PARSE & TURBOPACK ---
-  // This tells Next.js not to bundle this library, 
-  // preventing "Module not found" and "Export default" errors.
-  serverExternalPackages: ["pdf-parse"],
+  // --- EXPERIMENTAL (Keep only what is actually experimental) ---
+  experimental: {
+    serverActions: {
+      bodySizeLimit: '20mb',
+    },
+    proxyClientMaxBodySize: '20mb',
+  },
 
-  // Enables optimizations for Lucide icons used in your ChatInput
+  // --- WEBPACK FALLBACK ---
+  webpack: (config) => {
+    config.resolve.alias.canvas = false;
+    config.resolve.alias.encoding = false;
+    return config;
+  },
+
   transpilePackages: ["lucide-react"],
-
-  // Standard React safety checks
   reactStrictMode: true,
 
-  // --- BUILD OPTIMIZATION ---
-  // Generates a unique ID for every build to prevent stale cache 
-  // errors like "Module factory not available"
   generateBuildId: async () => {
     return `build-${Date.now()}`;
   },
 
-  // --- CACHE CONTROL ---
-  // Prevents the browser from caching outdated JS chunks during development
   async headers() {
     return [
       {
@@ -53,8 +57,6 @@ const nextConfig = {
     ];
   },
 
-  // --- IMAGE OPTIMIZATION ---
-  // Allows you to display external images (like user avatars or links)
   images: {
     remotePatterns: [
       {
