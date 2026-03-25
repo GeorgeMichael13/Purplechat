@@ -9,10 +9,14 @@ import {
   Fingerprint,
   ShieldCheck,
   Activity,
-  Camera, // New icon
+  Camera,
+  Radio, // For Broadcast
+  Download, // For CSV
+  Users, // For Admin section
+  Trash2, // For delete
 } from "lucide-react";
 import { motion } from "framer-motion";
-import { useState, useMemo, useRef } from "react"; // Added useRef
+import { useState, useMemo, useRef } from "react";
 import { toast } from "sonner";
 import UserDashboard from "@/components/profile/UsageDashboard";
 
@@ -21,16 +25,26 @@ interface ProfilePageProps {
 }
 
 export default function ProfilePage({ onBack }: ProfilePageProps) {
-  const { currentUser, updateProfile, updateAvatar, logout } = useChatStore();
+  const {
+    currentUser,
+    updateProfile,
+    updateAvatar,
+    logout,
+    users,
+    broadcastMessage,
+    exportLeadsToCSV,
+    deleteUser,
+  } = useChatStore();
 
   const [name, setName] = useState(currentUser?.name || "");
   const [occupation, setOccupation] = useState(currentUser?.occupation || "");
   const [isSaving, setIsSaving] = useState(false);
+  const [broadcastText, setBroadcastText] = useState("");
 
-  // Create a reference for the hidden file input
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Neural ID Generation
+  const isAdmin = currentUser?.role === "admin";
+
   const neuralId = useMemo(() => {
     const prefix = currentUser?.name?.slice(0, 3).toUpperCase() || "USR";
     const suffix = currentUser?.joinedAt
@@ -39,7 +53,6 @@ export default function ProfilePage({ onBack }: ProfilePageProps) {
     return `PRP-${prefix}-${suffix}`;
   }, [currentUser, name]);
 
-  // --- NEW: HANDLE IMAGE UPLOAD ---
   const handleImageClick = () => {
     fileInputRef.current?.click();
   };
@@ -47,7 +60,6 @@ export default function ProfilePage({ onBack }: ProfilePageProps) {
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      // Basic check for file size (e.g., max 2MB for local storage)
       if (file.size > 2 * 1024 * 1024) {
         toast.error("File too large", {
           description: "Please select an image under 2MB.",
@@ -58,7 +70,7 @@ export default function ProfilePage({ onBack }: ProfilePageProps) {
       const reader = new FileReader();
       reader.onloadend = () => {
         const base64String = reader.result as string;
-        updateAvatar(base64String); // Save to Zustand store
+        updateAvatar(base64String);
         toast.success("Identity Visual Updated", {
           description: "Neural avatar synchronized.",
           style: { background: "#7c3aed", color: "#fff" },
@@ -80,9 +92,17 @@ export default function ProfilePage({ onBack }: ProfilePageProps) {
     });
   };
 
+  const handleBroadcast = () => {
+    if (!broadcastText.trim()) return;
+    broadcastMessage(broadcastText);
+    setBroadcastText("");
+    toast.success("Signal Broadcasted", {
+      description: "Message sent to all active nodes.",
+    });
+  };
+
   return (
     <div className="h-full w-full bg-[#f8fafc] dark:bg-[#020617] overflow-y-auto relative custom-scrollbar">
-      {/* Hidden File Input */}
       <input
         type="file"
         ref={fileInputRef}
@@ -130,7 +150,7 @@ export default function ProfilePage({ onBack }: ProfilePageProps) {
                 <div className="flex items-center gap-3">
                   <div className="w-2.5 h-2.5 bg-white rounded-full animate-pulse shadow-[0_0_10px_rgba(255,255,255,0.8)]" />
                   <span className="font-black text-[10px] uppercase tracking-widest">
-                    Neural Link: Active
+                    Neural Link: {isAdmin ? "Admin Root" : "Active"}
                   </span>
                 </div>
                 <div className="font-mono text-[10px] font-bold tracking-[0.2em] opacity-80">
@@ -157,8 +177,6 @@ export default function ProfilePage({ onBack }: ProfilePageProps) {
                         {name?.[0]?.toUpperCase() || "U"}
                       </div>
                     )}
-
-                    {/* Hover Overlay for Camera */}
                     <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-300">
                       <Camera className="text-white" size={32} />
                     </div>
@@ -192,7 +210,7 @@ export default function ProfilePage({ onBack }: ProfilePageProps) {
                       Security
                     </p>
                     <p className="text-xl font-black dark:text-white font-mono text-violet-500">
-                      Tier 4
+                      {isAdmin ? "Root" : "Tier 4"}
                     </p>
                   </div>
                 </div>
@@ -252,6 +270,92 @@ export default function ProfilePage({ onBack }: ProfilePageProps) {
             </motion.div>
           </div>
         </div>
+
+        {/* --- ADMIN ONLY: SYSTEM COMMAND CENTER --- */}
+        {isAdmin && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="mt-12 p-8 bg-white dark:bg-slate-900/60 backdrop-blur-3xl rounded-[2.5rem] shadow-2xl border-2 border-violet-500/20"
+          >
+            <div className="flex items-center justify-between mb-8">
+              <div>
+                <h3 className="text-xl font-black dark:text-white tracking-tighter">
+                  Root Command Center
+                </h3>
+                <p className="text-[10px] font-black text-violet-500 uppercase tracking-widest">
+                  Global Administrative Access
+                </p>
+              </div>
+              <button
+                onClick={exportLeadsToCSV}
+                className="flex items-center gap-2 px-4 py-2 bg-emerald-500/10 text-emerald-500 rounded-xl hover:bg-emerald-500 hover:text-white transition-all font-bold text-[10px] uppercase tracking-widest"
+              >
+                <Download size={14} /> Export Logs
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+              {/* Broadcast Tool */}
+              <div className="space-y-4">
+                <label className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.2em] text-fuchsia-500 ml-2">
+                  <Radio size={14} /> Global Neural Broadcast
+                </label>
+                <div className="relative">
+                  <textarea
+                    value={broadcastText}
+                    onChange={(e) => setBroadcastText(e.target.value)}
+                    placeholder="Enter message for all users..."
+                    className="w-full px-6 py-4 bg-slate-50 dark:bg-slate-950/50 border border-slate-100 dark:border-white/5 rounded-3xl focus:outline-none focus:border-fuchsia-500 transition-all font-bold min-h-[120px]"
+                  />
+                  <button
+                    onClick={handleBroadcast}
+                    className="absolute bottom-4 right-4 p-3 bg-fuchsia-600 text-white rounded-2xl shadow-lg hover:scale-105 transition-transform"
+                  >
+                    <Radio size={18} />
+                  </button>
+                </div>
+              </div>
+
+              {/* User Management List */}
+              <div className="space-y-4">
+                <label className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.2em] text-violet-500 ml-2">
+                  <Users size={14} /> Registered Nodes ({users.length})
+                </label>
+                <div className="bg-slate-50 dark:bg-slate-950/50 rounded-3xl border border-slate-100 dark:border-white/5 max-h-[120px] overflow-y-auto custom-scrollbar p-2">
+                  {users.map((u) => (
+                    <div
+                      key={u.id}
+                      className="flex items-center justify-between p-3 hover:bg-white dark:hover:bg-white/5 rounded-2xl transition-colors group"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-lg bg-violet-500/20 flex items-center justify-center text-violet-500 font-bold text-xs">
+                          {u.name[0]}
+                        </div>
+                        <div>
+                          <p className="text-xs font-black dark:text-white">
+                            {u.name}
+                          </p>
+                          <p className="text-[9px] text-slate-400 font-mono">
+                            {u.email}
+                          </p>
+                        </div>
+                      </div>
+                      {u.role !== "admin" && (
+                        <button
+                          onClick={() => deleteUser(u.id)}
+                          className="opacity-0 group-hover:opacity-100 p-2 text-slate-400 hover:text-red-500 transition-all"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </motion.div>
+        )}
 
         <div className="mt-12 mb-6 flex items-center gap-4">
           <div className="h-[2px] flex-1 bg-gradient-to-r from-transparent via-slate-200 dark:via-white/10 to-transparent" />

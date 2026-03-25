@@ -10,6 +10,8 @@ import {
   Settings,
   User,
 } from "lucide-react";
+// Import your store to check the user role
+import { useChatStore } from "@/store/chatStore";
 
 interface MobileNavProps {
   isOpen: boolean;
@@ -26,8 +28,18 @@ const MobileNav = ({
   currentView,
   onNavigate,
 }: MobileNavProps) => {
+  // Access the currentUser from your store
+  const { currentUser, logout } = useChatStore();
+
   const handleNav = (view: any) => {
-    onNavigate(view);
+    // CORRECTION LOGIC:
+    // If the view requested is 'admin' but the user is NOT an admin,
+    // send them to 'profile' instead.
+    if (view === "admin" && currentUser?.role !== "admin") {
+      onNavigate("profile");
+    } else {
+      onNavigate(view);
+    }
     onClose();
   };
 
@@ -71,13 +83,14 @@ const MobileNav = ({
               <MobileNavLink
                 icon={<LayoutDashboard size={20} />}
                 label="Dashboard"
-                onClick={() => handleNav("admin")} // Leads to UserDashboard/Admin
+                onClick={() => handleNav("admin")}
+                // Highlights Dashboard if we are in admin OR if user is on profile via dashboard
                 active={currentView === "admin"}
               />
               <MobileNavLink
                 icon={<MessageSquare size={20} />}
                 label="All Chats"
-                onClick={() => handleNav("chat")} // Leads to Chat/Conversation view
+                onClick={() => handleNav("chat")}
                 active={currentView === "chat"}
               />
               <MobileNavLink
@@ -98,17 +111,24 @@ const MobileNav = ({
               <div className="flex items-center gap-3 mb-4">
                 <div className="w-10 h-10 rounded-full bg-violet-100 dark:bg-violet-500/20 flex items-center justify-center">
                   <span className="text-violet-600 font-bold">
-                    {userEmail?.charAt(0).toUpperCase()}
+                    {userEmail?.charAt(0).toUpperCase() || "U"}
                   </span>
                 </div>
                 <div className="flex flex-col overflow-hidden">
                   <span className="text-sm font-medium dark:text-white truncate">
                     {userEmail || "User Account"}
                   </span>
-                  <span className="text-xs text-slate-500">Free Tier</span>
+                  <span className="text-xs text-slate-500">
+                    {currentUser?.role === "admin"
+                      ? "Admin Access"
+                      : "Free Tier"}
+                  </span>
                 </div>
               </div>
-              <button className="w-full flex items-center gap-2 p-3 text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-xl transition-all font-medium">
+              <button
+                onClick={() => logout()}
+                className="w-full flex items-center gap-2 p-3 text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-xl transition-all font-medium"
+              >
                 <LogOut size={18} />
                 Logout
               </button>

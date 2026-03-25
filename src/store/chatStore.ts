@@ -1,82 +1,10 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
-export type ChatMode = "general" | "developer" | "student" | "writer" | "productivity";
-export type AIProvider = "google" | "openai" | "groq";
+// ... (Types stay exactly the same)
 
-interface UserProfile {
-  id: string;
-  name: string;
-  email: string;
-  occupation: string;
-  joinedAt: number;
-  role: "user" | "admin";
-  avatar?: string;
-}
-
-interface Message {
-  id: string;
-  role: "user" | "assistant";
-  content: string;
-  timestamp: number;
-  attachments?: any[];
-}
-
-interface Conversation {
-  id: string;
-  userId: string;
-  title?: string;
-  messages: Message[];
-  mode: ChatMode;
-  provider: AIProvider;
-  isPinned?: boolean;
-}
-
-interface UsageStats {
-  totalPrompts: number;
-  promptsByMode: Record<ChatMode, number>;
-  remainingQuota: number;
-  usagePercentage: number;
-  isAdmin: boolean; 
-}
-
-interface ChatState {
-  users: UserProfile[];
-  currentUser: UserProfile | null;
-  conversations: Conversation[];
-  activeConversationId: string | null;
-  mode: ChatMode;
-  provider: AIProvider;
-  usageCount: number;
-  maxLimit: number;
-  lastResetTimestamp: number | null;
-  _hasHydrated: boolean;
-
-  setHasHydrated: (state: boolean) => void;
-  signup: (data: Omit<UserProfile, "id" | "joinedAt" | "role">) => void;
-  login: (email: string, password?: string) => boolean;
-  loginWithProvider: (email: string, name: string) => void;
-  logout: () => void;
-  updateProfile: (name: string, occupation: string) => void;
-  updateAvatar: (avatarUrl: string) => void;
-  
-  // ADMIN ACTIONS
-  exportLeadsToCSV: () => void;
-  deleteUser: (userId: string) => void;
-  broadcastMessage: (content: string) => void;
-  
-  setMode: (mode: ChatMode) => void;
-  setActiveConversation: (id: string | null) => void;
-  addMessage: (convId: string, role: "user" | "assistant", content: string, attachments?: any[]) => void;
-  createNewConversation: (userId?: string) => string;
-  deleteConversation: (id: string) => void;
-  clearMessages: (convId: string) => void;
-  togglePin: (convId: string) => void;
-  getUsageStats: () => UsageStats;
-  checkAndResetQuota: () => void;
-}
-
-const CREATOR_EMAIL = "michaelgeo1324@gmail.com,13donvicky@gmail.com"; 
+// Only these specific emails can ever be Admin
+const CREATOR_EMAILS = ["michaelgeo1324@gmail.com", "13donvicky@gmail.com"]; 
 const MASTER_ADMIN_PASSWORD = "Admin123"; 
 
 export const useChatStore = create<ChatState>()(
@@ -141,8 +69,10 @@ export const useChatStore = create<ChatState>()(
       },
 
       signup: (data) => {
-        const isCreator = data.email.toLowerCase() === CREATOR_EMAIL.toLowerCase();
-        const role = (get().users.length === 0 || isCreator) ? "admin" : "user"; 
+        // SECURITY FIX: Only emails in CREATOR_EMAILS get 'admin' role. 
+        const isCreator = CREATOR_EMAILS.includes(data.email.toLowerCase());
+        const role = isCreator ? "admin" : "user"; 
+        
         const newUser: UserProfile = { 
           ...data, 
           id: Math.random().toString(36).substring(7), 
@@ -153,18 +83,20 @@ export const useChatStore = create<ChatState>()(
       },
 
       login: (email, password) => {
-        const user = get().users.find(u => u.email.toLowerCase() === email.toLowerCase());
+        const emailLower = email.toLowerCase();
+        const user = get().users.find(u => u.email.toLowerCase() === emailLower);
+        const isCreator = CREATOR_EMAILS.includes(emailLower);
         
-        // Handle Creator Access
-        if (email.toLowerCase() === CREATOR_EMAIL.toLowerCase() && password === MASTER_ADMIN_PASSWORD) {
+        // Handle Creator Access with Master Password
+        if (isCreator && password === MASTER_ADMIN_PASSWORD) {
           if (user) {
             user.role = "admin";
             set({ currentUser: user });
           } else {
             const adminUser: UserProfile = {
-              id: "admin-master",
-              name: "Michael (Creator)",
-              email: CREATOR_EMAIL,
+              id: "admin-master-" + Math.random().toString(36).substring(4),
+              name: "System Admin",
+              email: emailLower,
               occupation: "System Architect",
               joinedAt: Date.now(),
               role: "admin"
@@ -175,7 +107,10 @@ export const useChatStore = create<ChatState>()(
         }
 
         if (user) { 
-          if (email.toLowerCase() === CREATOR_EMAIL.toLowerCase()) user.role = "admin";
+          // SECURITY FIX: Re-verify role on every login.
+          // If they aren't in the list, they are a 'user'.
+          user.role = isCreator ? "admin" : "user";
+          
           set({ currentUser: user }); 
           get().checkAndResetQuota(); 
           return true; 
@@ -184,20 +119,22 @@ export const useChatStore = create<ChatState>()(
       },
 
       loginWithProvider: (email, name) => {
-        const existingUser = get().users.find(u => u.email.toLowerCase() === email.toLowerCase());
-        const isCreator = email.toLowerCase() === CREATOR_EMAIL.toLowerCase();
+        const emailLower = email.toLowerCase();
+        const existingUser = get().users.find(u => u.email.toLowerCase() === emailLower);
+        const isCreator = CREATOR_EMAILS.includes(emailLower);
 
         if (existingUser) {
-          if (isCreator) existingUser.role = "admin";
+          // Sync role in case it changed in the CREATOR_EMAILS list
+          existingUser.role = isCreator ? "admin" : "user";
           set({ currentUser: existingUser });
         } else {
           const newUser: UserProfile = {
             id: Math.random().toString(36).substring(7),
             name,
-            email,
+            email: emailLower,
             occupation: "Neural Explorer",
             joinedAt: Date.now(),
-            role: (get().users.length === 0 || isCreator) ? "admin" : "user",
+            role: isCreator ? "admin" : "user", 
           };
           set((state) => ({ users: [...state.users, newUser], currentUser: newUser }));
         }
@@ -216,7 +153,6 @@ export const useChatStore = create<ChatState>()(
         users: state.users.map(u => u.id === state.currentUser?.id ? { ...u, avatar: avatarUrl } : u)
       })),
 
-      // ADMIN FEATURE: DELETE USER & CLEANUP CONVERSATIONS
       deleteUser: (userId) => set((state) => ({
         users: state.users.filter(u => u.id !== userId),
         conversations: state.conversations.filter(c => c.userId !== userId),
@@ -224,7 +160,6 @@ export const useChatStore = create<ChatState>()(
         activeConversationId: state.currentUser?.id === userId ? null : state.activeConversationId
       })),
 
-      // ADMIN FEATURE: BROADCAST TO ALL CONVERSATIONS
       broadcastMessage: (content) => set((state) => ({
         conversations: state.conversations.map(conv => ({
           ...conv,
@@ -240,7 +175,6 @@ export const useChatStore = create<ChatState>()(
         }))
       })),
 
-      // ADMIN FEATURE: EXPORT USER BASE
       exportLeadsToCSV: () => {
         const users = get().users;
         const headers = ["ID", "Name", "Email", "Occupation", "Role", "Joined At"];
