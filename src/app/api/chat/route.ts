@@ -20,11 +20,13 @@ export async function POST(req: Request) {
     // --- NEW: Detect Images for Vision Support ---
     const imageAttachments = lastMessage.attachments?.filter((a: any) => a.isImage) || [];
 
-    // --- FILE INTELLIGENCE LOGIC (Original Maintained) ---
+    // --- FILE INTELLIGENCE LOGIC (Original Maintained with TS Fix) ---
     if (lastMessage.attachments && lastMessage.attachments.length > 0) {
       let parsePdf;
       try {
-        const pdfModule = await import("pdf-parse");
+        // FIXED: Added @ts-ignore and any cast to satisfy Netlify's build engine
+        // @ts-ignore
+        const pdfModule: any = await import("pdf-parse");
         parsePdf = pdfModule.default || pdfModule;
       } catch (importErr) {
         console.error("❌ Failed to load pdf-parse:", importErr);
