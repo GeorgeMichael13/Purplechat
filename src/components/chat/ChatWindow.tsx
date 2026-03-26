@@ -31,6 +31,7 @@ import {
   ExternalLink,
   Search,
   Loader2,
+  Wrench, // Added for repair icon
 } from "lucide-react";
 import { useState, useRef, useEffect, useCallback } from "react";
 import { cn } from "@/lib/utils";
@@ -253,7 +254,6 @@ export default function ChatWindow({ onNewMessage }: ChatWindowProps) {
 
   // Trigger scroll on message length change OR typing state change
   useEffect(() => {
-    // Small timeout ensures the DOM has rendered the new message bubble before scrolling
     const timer = setTimeout(() => {
       scrollToBottom();
     }, 100);
@@ -352,6 +352,15 @@ export default function ChatWindow({ onNewMessage }: ChatWindowProps) {
     }
   };
 
+  // --- REPAIR FUNCTION ---
+  const handleSystemRepair = () => {
+    toast.loading("Repairing neural links...");
+    setTimeout(() => {
+      localStorage.clear();
+      window.location.reload();
+    }, 1500);
+  };
+
   if (!mounted) return null;
 
   const ActionList = ({ isMobile = false }) => (
@@ -411,6 +420,18 @@ export default function ChatWindow({ onNewMessage }: ChatWindowProps) {
           <span className="text-sm font-medium">Clear Messages</span>
         )}
       </button>
+
+      {/* REPAIR BUTTON (Mobile Only) */}
+      {isMobile && (
+        <button
+          onClick={handleSystemRepair}
+          className="p-2 text-emerald-500 hover:bg-emerald-500/10 rounded-lg flex items-center gap-3 mt-1"
+        >
+          <Wrench size={18} />
+          <span className="text-sm font-medium">Repair Neural Link</span>
+        </button>
+      )}
+
       {isMobile && (
         <button
           onClick={() => logout()}
@@ -485,6 +506,14 @@ export default function ChatWindow({ onNewMessage }: ChatWindowProps) {
         <div className="hidden lg:flex items-center">
           <ActionList />
           <div className="w-[1px] h-4 bg-slate-200 dark:bg-white/10 mx-2" />
+          {/* Repair Button (Desktop Icon) */}
+          <button
+            onClick={handleSystemRepair}
+            title="Repair System"
+            className="p-2 text-slate-400 hover:text-emerald-500"
+          >
+            <Wrench size={18} />
+          </button>
           <button
             onClick={() => logout()}
             className="p-2 text-slate-400 hover:text-orange-500"
@@ -567,17 +596,23 @@ export default function ChatWindow({ onNewMessage }: ChatWindowProps) {
           ) : (
             <div className="space-y-8 max-w-4xl mx-auto">
               {activeConv.messages.map((msg) => {
-                const isInjection = msg.content.startsWith(
-                  '{"type":"NEURAL_SEARCH_INJECTION"',
-                );
-                let displayContent = msg.content;
+                // DEFENSIVE RENDERING CHECK
+                const isInjection =
+                  msg.content &&
+                  typeof msg.content === "string" &&
+                  msg.content.startsWith('{"type":"NEURAL_SEARCH_INJECTION"');
+
+                let displayContent = msg.content || "";
                 let sources = [];
+
                 if (isInjection) {
                   try {
                     const parsed = JSON.parse(msg.content);
                     displayContent = parsed.userQuery;
                     sources = parsed.sources || [];
-                  } catch (e) {}
+                  } catch (e) {
+                    displayContent = "Neural data corrupted.";
+                  }
                 }
                 const isEditing = editingMessageId === msg.id;
 

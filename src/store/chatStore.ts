@@ -32,7 +32,7 @@ export const useChatStore = create<ChatState>()(
         const state = get();
         if (!state.currentUser) return [];
         if (state.currentUser.role === "admin") return state.conversations;
-        return state.conversations.filter(c => c.userId === state.currentUser?.id);
+        return (state.conversations || []).filter(c => c.userId === state.currentUser?.id);
       },
 
       // --- HTML2CANVAS EXPORT ENGINE ---
@@ -86,6 +86,12 @@ export const useChatStore = create<ChatState>()(
         }
       },
 
+      // --- SYSTEM REPAIR ENGINE ---
+      systemRepair: () => {
+        localStorage.clear();
+        window.location.reload();
+      },
+
       checkAndResetQuota: () => {
         const state = get();
         if (state.currentUser?.role === "admin") return;
@@ -101,7 +107,7 @@ export const useChatStore = create<ChatState>()(
         const state = get();
         const isAdmin = state.currentUser?.role === "admin";
         if (isAdmin) return { totalPrompts: 0, promptsByMode: { general: 0, developer: 0, student: 0, writer: 0, productivity: 0 } as any, remainingQuota: Infinity, usagePercentage: 0, isAdmin: true };
-        const userConvs = state.conversations.filter(c => c.userId === state.currentUser?.id);
+        const userConvs = (state.conversations || []).filter(c => c.userId === state.currentUser?.id);
         const promptsByMode: Record<string, number> = { general: 0, developer: 0, student: 0, writer: 0, productivity: 0 };
         userConvs.forEach(c => {
           const userMessages = c.messages.filter(m => m.role === "user").length;
@@ -197,7 +203,6 @@ export const useChatStore = create<ChatState>()(
         activeConversationId: state.activeConversationId === id ? null : state.activeConversationId
       })),
 
-      // --- NEW FEATURE: EDIT MESSAGE ---
       editMessage: (convId: string, messageId: string, newContent: string) => set((state) => ({
         conversations: state.conversations.map((c) => {
           if (c.id === convId) {
@@ -221,7 +226,7 @@ export const useChatStore = create<ChatState>()(
 
           return {
             usageCount: newUsageCount,
-            conversations: state.conversations.map((c) => {
+            conversations: (state.conversations || []).map((c) => {
               if (c.id === convId) {
                 const isFirstMsg = c.messages.length === 0 && role === "user";
                 return {
@@ -244,7 +249,6 @@ export const useChatStore = create<ChatState>()(
               favicon: `https://www.google.com/s2/favicons?domain=${new URL(r.url).hostname}&sz=64`
             }));
 
-            // PERSONALIZED: Witty summary with reduced emoji frequency
             const wittySummary = `I've analyzed the intel. Here's the situation: ${results[0]?.content?.slice(0, 150)}...`;
             const webData = results.map((r: any) => `[ONLINE INTEL SOURCE: ${r.title}]\n[DATA: ${r.content}]`).join("\n\n---\n\n");
             
