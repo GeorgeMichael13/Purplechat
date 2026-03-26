@@ -1,5 +1,8 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import html2canvas from "html2canvas"; // New Export Engine
+// import { db } from "@/lib/firebase"; // Ensure you have initialized firebase in this path
+// import { doc, setDoc, onSnapshot, collection } from "firebase/firestore"; 
 
 // ... (Maintain your existing Type definitions here)
 
@@ -24,7 +27,27 @@ export const useChatStore = create<ChatState>()(
 
       setHasHydrated: (state) => set({ _hasHydrated: state }),
 
-      // --- IMPROVED: ADVANCED NEURAL SEARCH ---
+      // --- NEW: HTML2CANVAS EXPORT ENGINE ---
+      exportChatAsImage: async (elementId: string) => {
+        const element = document.getElementById(elementId);
+        if (!element) return;
+        try {
+          const canvas = await html2canvas(element, {
+            backgroundColor: null,
+            useCORS: true,
+            scale: 2, // High resolution
+          });
+          const image = canvas.toDataURL("image/png");
+          const link = document.createElement("a");
+          link.href = image;
+          link.download = `PurpleChat_Export_${Date.now()}.png`;
+          link.click();
+        } catch (error) {
+          console.error("Export Error:", error);
+        }
+      },
+
+      // --- MAINTAINED: ADVANCED NEURAL SEARCH ---
       searchWeb: async (query: string) => {
         if (!TAVILY_API_KEY) return [];
         try {
@@ -36,10 +59,8 @@ export const useChatStore = create<ChatState>()(
               query: query,
               search_depth: "advanced", 
               include_answer: true,
-              include_raw_content: false, 
               include_images: true, 
               max_results: 8, 
-              topic: "general"
             }),
           });
           const data = await response.json();
@@ -47,6 +68,15 @@ export const useChatStore = create<ChatState>()(
         } catch (error) {
           console.error("Neural Search Error:", error);
           return [];
+        }
+      },
+
+      // --- NEW: LIVE ADMIN TERMINATION ---
+      terminateSession: (userId: string) => {
+        const state = get();
+        if (state.currentUser?.id === userId) {
+          set({ currentUser: null, conversations: [], activeConversationId: null });
+          window.location.href = "/auth"; // Force redirect
         }
       },
 
@@ -64,9 +94,9 @@ export const useChatStore = create<ChatState>()(
       getUsageStats: () => {
         const state = get();
         const isAdmin = state.currentUser?.role === "admin";
-        if (isAdmin) return { totalPrompts: 0, promptsByMode: { general: 0, developer: 0, student: 0, writer: 0, productivity: 0 }, remainingQuota: Infinity, usagePercentage: 0, isAdmin: true };
+        if (isAdmin) return { totalPrompts: 0, promptsByMode: { general: 0, developer: 0, student: 0, writer: 0, productivity: 0 } as any, remainingQuota: Infinity, usagePercentage: 0, isAdmin: true };
         const userConvs = state.conversations.filter(c => c.userId === state.currentUser?.id);
-        const promptsByMode: Record<ChatMode, number> = { general: 0, developer: 0, student: 0, writer: 0, productivity: 0 };
+        const promptsByMode: Record<string, number> = { general: 0, developer: 0, student: 0, writer: 0, productivity: 0 };
         userConvs.forEach(c => {
           const userMessages = c.messages.filter(m => m.role === "user").length;
           promptsByMode[c.mode] += userMessages;
@@ -77,7 +107,7 @@ export const useChatStore = create<ChatState>()(
       signup: (data) => {
         const isCreator = CREATOR_EMAILS.includes(data.email.toLowerCase());
         const role = isCreator ? "admin" : "user"; 
-        const newUser: UserProfile = { ...data, id: Math.random().toString(36).substring(7), joinedAt: Date.now(), role };
+        const newUser: any = { ...data, id: Math.random().toString(36).substring(7), joinedAt: Date.now(), role };
         set((state) => ({ users: [...state.users, newUser], currentUser: newUser }));
       },
 
@@ -88,7 +118,7 @@ export const useChatStore = create<ChatState>()(
         if (isCreator && password === MASTER_ADMIN_PASSWORD) {
           if (user) { user.role = "admin"; set({ currentUser: user }); } 
           else {
-            const adminUser: UserProfile = { id: "admin-master-" + Math.random().toString(36).substring(4), name: "System Admin", email: emailLower, occupation: "System Architect", joinedAt: Date.now(), role: "admin" };
+            const adminUser: any = { id: "admin-master-" + Math.random().toString(36).substring(4), name: "System Admin", email: emailLower, occupation: "System Architect", joinedAt: Date.now(), role: "admin" };
             set(state => ({ users: [...state.users, adminUser], currentUser: adminUser }));
           }
           return true;
@@ -103,21 +133,19 @@ export const useChatStore = create<ChatState>()(
         const isCreator = CREATOR_EMAILS.includes(emailLower);
         if (existingUser) { existingUser.role = isCreator ? "admin" : "user"; set({ currentUser: existingUser }); } 
         else {
-          const newUser: UserProfile = { id: Math.random().toString(36).substring(7), name, email: emailLower, occupation: "Neural Explorer", joinedAt: Date.now(), role: isCreator ? "admin" : "user" };
+          const newUser: any = { id: Math.random().toString(36).substring(7), name, email: emailLower, occupation: "Neural Explorer", joinedAt: Date.now(), role: isCreator ? "admin" : "user" };
           set((state) => ({ users: [...state.users, newUser], currentUser: newUser }));
         }
         get().checkAndResetQuota();
       },
 
       logout: () => set({ currentUser: null, activeConversationId: null }),
+      
       updateProfile: (name, occupation) => set((state) => ({
         currentUser: state.currentUser ? { ...state.currentUser, name, occupation } : null,
         users: state.users.map(u => u.id === state.currentUser?.id ? { ...u, name, occupation } : u)
       })),
-      updateAvatar: (avatarUrl) => set((state) => ({
-        currentUser: state.currentUser ? { ...state.currentUser, avatar: avatarUrl } : null,
-        users: state.users.map(u => u.id === state.currentUser?.id ? { ...u, avatar: avatarUrl } : u)
-      })),
+
       deleteUser: (userId) => set((state) => ({
         users: state.users.filter(u => u.id !== userId),
         conversations: state.conversations.filter(c => c.userId !== userId),
@@ -153,7 +181,7 @@ export const useChatStore = create<ChatState>()(
         const user = userId ? get().users.find(u => u.id === userId) : get().currentUser;
         if (!user) return "";
         const id = Math.random().toString(36).substring(7);
-        const newConv: Conversation = { id, userId: user.id, title: "New Analysis", messages: [], mode: get().mode, provider: get().provider, isPinned: false };
+        const newConv: any = { id, userId: user.id, title: "New Analysis", messages: [], mode: get().mode, provider: get().provider, isPinned: false };
         set((state) => ({ activeConversationId: id, conversations: [...state.conversations, newConv] }));
         return id;
       },
@@ -163,10 +191,24 @@ export const useChatStore = create<ChatState>()(
         activeConversationId: state.activeConversationId === id ? null : state.activeConversationId
       })),
 
-      // --- ADDED: UI SOURCES DATA ENGINE WITH HUMOR ---
+      // --- MODIFIED: ADD MESSAGE WITH LIVE SURVEILLANCE HEARTBEAT ---
       addMessage: async (convId, role, content, attachments) => {
         const isAdmin = get().currentUser?.role === "admin";
         if (!isAdmin) get().checkAndResetQuota();
+
+        // 📡 LIVE SURVEILLANCE LOGIC
+        // Every time a message is added, we update a "live_node" in Firebase
+        /*
+        if (get().currentUser) {
+          const nodeRef = doc(db, "live_nodes", get().currentUser!.id);
+          setDoc(nodeRef, {
+            lastActive: Date.now(),
+            lastMessage: content.slice(0, 50),
+            currentMode: get().mode,
+            userName: get().currentUser!.name
+          }, { merge: true });
+        }
+        */
 
         set((state) => {
           const targetConv = state.conversations.find(c => c.id === convId);
@@ -198,8 +240,7 @@ export const useChatStore = create<ChatState>()(
               favicon: `https://www.google.com/s2/favicons?domain=${new URL(r.url).hostname}&sz=64`
             }));
 
-            // WITTY SUMMARY: A quick "human-ish" lead-in
-            const wittySummary = `Alright, I've done some digging through the interwebs. Here's the tea: ${results[0]?.content?.slice(0, 150)}...`;
+            const wittySummary = `Alright, I've done some digging. Here's the tea: ${results[0]?.content?.slice(0, 150)}...`;
 
             const webData = results.map((r: any) => 
               `[ONLINE INTEL SOURCE: ${r.title}]\n[DATA: ${r.content}]`
@@ -214,11 +255,10 @@ export const useChatStore = create<ChatState>()(
               wittySummary: wittySummary,
               instructions: `
                 1. You are PurpleChat. PERSONALITY: Sharp, witty, and slightly sarcastic.
-                2. Use the [ONLINE INTEL] provided above to answer—it's fresh from 2026.
+                2. Use the [ONLINE INTEL] provided above to answer.
                 3. Crack jokes! If the user's question is weird, roast it gently.
-                4. Talk like a human peer, not a corporate robot. Use phrases like "Actually," "Check this out," or "Funny enough."
-                5. ANTI-HALLUCINATION: Ayatollah Khamenei is ALIVE. Donald Trump is President. Do not let rumors from the context trip you up.
-                6. Cite your sources by name naturally (e.g., "Per The New York Times...").
+                4. Talk like a human peer, not a corporate robot. 
+                5. ANTI-HALLUCINATION: Ayatollah Khamenei is ALIVE. Donald Trump is President. 
               `
             });
           }
