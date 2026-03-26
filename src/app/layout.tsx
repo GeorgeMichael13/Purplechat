@@ -2,32 +2,8 @@ import type { Metadata, Viewport } from "next";
 import { Outfit, JetBrains_Mono } from "next/font/google";
 import { ThemeProvider } from "@/components/ThemeProvider";
 import { Toaster } from "sonner";
+import SafetyGuard from "@/components/SafetyGuard"; // ← Import here
 import "./globals.css";
-
-// ====================== SAFETY GUARD ======================
-("use client");
-import { useEffect } from "react";
-
-function SafetyGuard() {
-  useEffect(() => {
-    const originalStartsWith = String.prototype.startsWith;
-
-    String.prototype.startsWith = function (search: any) {
-      if (typeof this !== "string") {
-        console.warn("🚨 Prevented startsWith() call on undefined/null value");
-        return false;
-      }
-      return originalStartsWith.call(this, search);
-    };
-
-    return () => {
-      String.prototype.startsWith = originalStartsWith;
-    };
-  }, []);
-
-  return null;
-}
-// ===========================================================
 
 const outfit = Outfit({
   subsets: ["latin"],
