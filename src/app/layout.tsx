@@ -2,7 +2,6 @@ import type { Metadata, Viewport } from "next";
 import { Outfit, JetBrains_Mono } from "next/font/google";
 import { ThemeProvider } from "@/components/ThemeProvider";
 import { Toaster } from "sonner";
-import SafetyGuard from "@/components/SafetyGuard"; // ← Import here
 import "./globals.css";
 
 const outfit = Outfit({
@@ -49,9 +48,6 @@ export default function RootLayout({
           enableSystem
           disableTransitionOnChange
         >
-          {/* Safety Guard - Prevents the startsWith undefined error */}
-          <SafetyGuard />
-
           <div className="flex flex-col h-[100vh] h-[100svh] w-full overflow-hidden">
             {children}
           </div>

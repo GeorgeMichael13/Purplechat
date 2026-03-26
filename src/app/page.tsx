@@ -15,29 +15,6 @@ import CreatorConsole from "@/components/admin/AdminDashboard";
 import MobileNav from "@/components/MobileNav";
 import SettingsPage from "@/components/SettingsPage";
 
-// ====================== SAFETY GUARD ======================
-// Prevents the "Cannot read properties of undefined (reading 'startsWith')" error
-function SafetyGuard() {
-  useEffect(() => {
-    const originalStartsWith = String.prototype.startsWith;
-
-    String.prototype.startsWith = function (search: any) {
-      if (typeof this !== "string") {
-        console.warn("🚨 Prevented startsWith() call on undefined/null value");
-        return false;
-      }
-      return originalStartsWith.call(this, search);
-    };
-
-    return () => {
-      String.prototype.startsWith = originalStartsWith;
-    };
-  }, []);
-
-  return null;
-}
-// ===========================================================
-
 const ChatWindow = dynamic(() => import("@/components/chat/ChatWindow"), {
   ssr: false,
   loading: () => (
@@ -213,9 +190,6 @@ export default function Home() {
           </motion.div>
         )}
       </AnimatePresence>
-
-      {/* Global Safety Guard */}
-      <SafetyGuard />
     </div>
   );
 }
