@@ -15,6 +15,29 @@ import CreatorConsole from "@/components/admin/AdminDashboard";
 import MobileNav from "@/components/MobileNav";
 import SettingsPage from "@/components/SettingsPage";
 
+// ====================== SAFETY GUARD ======================
+// Prevents the "Cannot read properties of undefined (reading 'startsWith')" error
+function SafetyGuard() {
+  useEffect(() => {
+    const originalStartsWith = String.prototype.startsWith;
+
+    String.prototype.startsWith = function (search: any) {
+      if (typeof this !== "string") {
+        console.warn("🚨 Prevented startsWith() call on undefined/null value");
+        return false;
+      }
+      return originalStartsWith.call(this, search);
+    };
+
+    return () => {
+      String.prototype.startsWith = originalStartsWith;
+    };
+  }, []);
+
+  return null;
+}
+// ===========================================================
+
 const ChatWindow = dynamic(() => import("@/components/chat/ChatWindow"), {
   ssr: false,
   loading: () => (
@@ -75,7 +98,6 @@ export default function Home() {
     return <div className="h-screen w-full bg-slate-950" />;
 
   return (
-    /* IMPROVED: Changed h-screen to h-[100svh] for mobile browser compatibility */
     <div className="flex h-[100svh] w-full overflow-hidden bg-white dark:bg-slate-950">
       <AnimatePresence mode="wait">
         {showLoader ? (
@@ -98,7 +120,6 @@ export default function Home() {
             {!currentUser ? (
               <AuthPage />
             ) : (
-              /* IMPROVED: Flex layout to force ChatWindow to fill available space */
               <div className="flex h-full w-full main-layout-wrapper overflow-hidden">
                 {/* DESKTOP SIDEBAR */}
                 <div className="hidden lg:block h-full border-r border-slate-200 dark:border-white/10">
@@ -134,7 +155,7 @@ export default function Home() {
                     </div>
                   </header>
 
-                  {/* IMPROVED: Full height container for views with overflow-hidden */}
+                  {/* MAIN CONTENT AREA */}
                   <div className="flex-1 relative overflow-hidden">
                     <AnimatePresence mode="wait" initial={false}>
                       {view === "chat" && (
@@ -145,7 +166,6 @@ export default function Home() {
                           exit={{ opacity: 0, x: -10 }}
                           className="absolute inset-0 flex flex-col"
                         >
-                          {/* ChatWindow needs to handle its own internal scrolling and pinned input */}
                           <ChatWindow onNewMessage={triggerPurpleVoice} />
                         </motion.div>
                       )}
@@ -193,6 +213,9 @@ export default function Home() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Global Safety Guard */}
+      <SafetyGuard />
     </div>
   );
 }
