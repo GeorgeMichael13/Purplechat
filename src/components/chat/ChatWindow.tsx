@@ -203,8 +203,11 @@ export default function ChatWindow({ onNewMessage }: ChatWindowProps) {
   const [mounted, setMounted] = useState(false);
   const [showModeMenu, setShowModeMenu] = useState(false);
   const [showActionMenu, setShowActionMenu] = useState(false);
+
+  // New State for Editing
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [editBuffer, setEditBuffer] = useState("");
+
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [ttsEnabled, setTtsEnabled] = useState(true);
   const synth = typeof window !== "undefined" ? window.speechSynthesis : null;
@@ -229,6 +232,7 @@ export default function ChatWindow({ onNewMessage }: ChatWindowProps) {
   const [input, setInput] = useState("");
   const [isTyping, setIsTyping] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const scrollAnchorRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => setMounted(true), []);
 
@@ -236,12 +240,10 @@ export default function ChatWindow({ onNewMessage }: ChatWindowProps) {
   const hasMessages = activeConv && activeConv.messages.length > 0;
   const currentMode = MODES.find((m) => m.id === mode) || MODES[0];
 
+  // Auto-scroll logic
   useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTo({
-        top: scrollRef.current.scrollHeight,
-        behavior: "smooth",
-      });
+    if (scrollAnchorRef.current) {
+      scrollAnchorRef.current.scrollIntoView({ behavior: "smooth" });
     }
   }, [activeConv?.messages, isTyping]);
 
@@ -319,6 +321,24 @@ export default function ChatWindow({ onNewMessage }: ChatWindowProps) {
       toast.error("Error connecting to engine");
     } finally {
       setIsTyping(false);
+    }
+  };
+
+  // Restoring Edit Actions
+  const startEditing = (id: string, content: string) => {
+    setEditingMessageId(id);
+    setEditBuffer(content);
+  };
+
+  const cancelEditing = () => {
+    setEditingMessageId(null);
+    setEditBuffer("");
+  };
+
+  const saveEdit = (id: string) => {
+    if (editBuffer.trim()) {
+      handleSend(editBuffer);
+      setEditingMessageId(null);
     }
   };
 
@@ -549,6 +569,9 @@ export default function ChatWindow({ onNewMessage }: ChatWindowProps) {
                     sources = parsed.sources || [];
                   } catch (e) {}
                 }
+
+                const isEditing = editingMessageId === msg.id;
+
                 return (
                   <motion.div
                     key={msg.id}
@@ -588,11 +611,38 @@ export default function ChatWindow({ onNewMessage }: ChatWindowProps) {
                             : "bg-white dark:bg-slate-900 border-slate-100 dark:border-white/5 text-slate-800 dark:text-slate-200 rounded-tl-none",
                         )}
                       >
-                        <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                          {displayContent}
-                        </ReactMarkdown>
-                        {sources.length > 0 && (
-                          <NeuralSources sources={sources} />
+                        {isEditing ? (
+                          <div className="flex flex-col gap-2 min-w-[220px]">
+                            <textarea
+                              className="bg-transparent border-none text-white focus:ring-0 w-full resize-none p-0 text-sm"
+                              value={editBuffer}
+                              onChange={(e) => setEditBuffer(e.target.value)}
+                              autoFocus
+                            />
+                            <div className="flex justify-end gap-2 border-t border-white/20 pt-2">
+                              <button
+                                onClick={cancelEditing}
+                                className="p-1 hover:bg-white/10 rounded text-white/70 transition-colors"
+                              >
+                                <X size={14} />
+                              </button>
+                              <button
+                                onClick={() => saveEdit(msg.id)}
+                                className="p-1 hover:bg-white/10 rounded text-white transition-colors"
+                              >
+                                <Check size={14} />
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <>
+                            <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                              {displayContent}
+                            </ReactMarkdown>
+                            {sources.length > 0 && (
+                              <NeuralSources sources={sources} />
+                            )}
+                          </>
                         )}
                       </div>
                       <div className="flex items-center gap-3 mt-1 opacity-60 hover:opacity-100 transition-opacity">
@@ -602,6 +652,14 @@ export default function ChatWindow({ onNewMessage }: ChatWindowProps) {
                         >
                           <Copy size={14} />
                         </button>
+                        {msg.role === "user" && !isEditing && (
+                          <button
+                            onClick={() => startEditing(msg.id, displayContent)}
+                            className="text-slate-400 hover:text-white"
+                          >
+                            <Edit2 size={14} />
+                          </button>
+                        )}
                         {msg.role === "assistant" && (
                           <button
                             onClick={() => speakText(msg.content)}
@@ -615,9 +673,8 @@ export default function ChatWindow({ onNewMessage }: ChatWindowProps) {
                   </motion.div>
                 );
               })}
-
-              {/* --- THINKING STATE TRIGGER --- */}
               {isTyping && <ThinkingBubble modeIcon={currentMode.icon} />}
+              <div ref={scrollAnchorRef} className="h-4" />
             </div>
           )}
         </AnimatePresence>

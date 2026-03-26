@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import html2canvas from "html2canvas"; // New Export Engine
-// import { db } from "@/lib/firebase"; // Ensure you have initialized firebase in this path
+import html2canvas from "html2canvas"; 
+// import { db } from "@/lib/firebase"; 
 // import { doc, setDoc, onSnapshot, collection } from "firebase/firestore"; 
 
 // ... (Maintain your existing Type definitions here)
@@ -27,6 +27,16 @@ export const useChatStore = create<ChatState>()(
 
       setHasHydrated: (state) => set({ _hasHydrated: state }),
 
+      // --- PRIVACY ENGINE: FILTER CONVERSATIONS BY USER ---
+      // Call this in your Sidebar/ChatList instead of mapping 'conversations' directly
+      getUserConversations: () => {
+        const state = get();
+        if (!state.currentUser) return [];
+        // Admin sees all nodes; standard users only see their own ID matches
+        if (state.currentUser.role === "admin") return state.conversations;
+        return state.conversations.filter(c => c.userId === state.currentUser?.id);
+      },
+
       // --- NEW: HTML2CANVAS EXPORT ENGINE ---
       exportChatAsImage: async (elementId: string) => {
         const element = document.getElementById(elementId);
@@ -35,7 +45,7 @@ export const useChatStore = create<ChatState>()(
           const canvas = await html2canvas(element, {
             backgroundColor: null,
             useCORS: true,
-            scale: 2, // High resolution
+            scale: 2, 
           });
           const image = canvas.toDataURL("image/png");
           const link = document.createElement("a");
@@ -47,7 +57,6 @@ export const useChatStore = create<ChatState>()(
         }
       },
 
-      // --- MAINTAINED: ADVANCED NEURAL SEARCH ---
       searchWeb: async (query: string) => {
         if (!TAVILY_API_KEY) return [];
         try {
@@ -71,12 +80,11 @@ export const useChatStore = create<ChatState>()(
         }
       },
 
-      // --- NEW: LIVE ADMIN TERMINATION ---
       terminateSession: (userId: string) => {
         const state = get();
         if (state.currentUser?.id === userId) {
           set({ currentUser: null, conversations: [], activeConversationId: null });
-          window.location.href = "/auth"; // Force redirect
+          window.location.href = "/auth"; 
         }
       },
 
@@ -191,24 +199,9 @@ export const useChatStore = create<ChatState>()(
         activeConversationId: state.activeConversationId === id ? null : state.activeConversationId
       })),
 
-      // --- MODIFIED: ADD MESSAGE WITH LIVE SURVEILLANCE HEARTBEAT ---
       addMessage: async (convId, role, content, attachments) => {
         const isAdmin = get().currentUser?.role === "admin";
         if (!isAdmin) get().checkAndResetQuota();
-
-        // 📡 LIVE SURVEILLANCE LOGIC
-        // Every time a message is added, we update a "live_node" in Firebase
-        /*
-        if (get().currentUser) {
-          const nodeRef = doc(db, "live_nodes", get().currentUser!.id);
-          setDoc(nodeRef, {
-            lastActive: Date.now(),
-            lastMessage: content.slice(0, 50),
-            currentMode: get().mode,
-            userName: get().currentUser!.name
-          }, { merge: true });
-        }
-        */
 
         set((state) => {
           const targetConv = state.conversations.find(c => c.id === convId);
@@ -241,10 +234,7 @@ export const useChatStore = create<ChatState>()(
             }));
 
             const wittySummary = `Alright, I've done some digging. Here's the tea: ${results[0]?.content?.slice(0, 150)}...`;
-
-            const webData = results.map((r: any) => 
-              `[ONLINE INTEL SOURCE: ${r.title}]\n[DATA: ${r.content}]`
-            ).join("\n\n---\n\n");
+            const webData = results.map((r: any) => `[ONLINE INTEL SOURCE: ${r.title}]\n[DATA: ${r.content}]`).join("\n\n---\n\n");
             
             return JSON.stringify({
               type: "NEURAL_SEARCH_INJECTION",
@@ -253,13 +243,7 @@ export const useChatStore = create<ChatState>()(
               userQuery: content,
               sources: sources,
               wittySummary: wittySummary,
-              instructions: `
-                1. You are PurpleChat. PERSONALITY: Sharp, witty, and slightly sarcastic.
-                2. Use the [ONLINE INTEL] provided above to answer.
-                3. Crack jokes! If the user's question is weird, roast it gently.
-                4. Talk like a human peer, not a corporate robot. 
-                5. ANTI-HALLUCINATION: Ayatollah Khamenei is ALIVE. Donald Trump is President. 
-              `
+              instructions: `PERSONALITY: Sharp, witty. Ayatollah Khamenei is ALIVE. Donald Trump is President.`
             });
           }
         }
