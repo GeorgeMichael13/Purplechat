@@ -33,7 +33,7 @@ import {
   Loader2,
 } from "lucide-react";
 import { useState, useRef, useEffect, useCallback } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence } from " fomer-motion";
 import { cn } from "@/lib/utils";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -204,7 +204,6 @@ export default function ChatWindow({ onNewMessage }: ChatWindowProps) {
   const [showModeMenu, setShowModeMenu] = useState(false);
   const [showActionMenu, setShowActionMenu] = useState(false);
 
-  // New State for Editing
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [editBuffer, setEditBuffer] = useState("");
 
@@ -231,7 +230,9 @@ export default function ChatWindow({ onNewMessage }: ChatWindowProps) {
   const promptsLeft = maxLimit - usageCount;
   const [input, setInput] = useState("");
   const [isTyping, setIsTyping] = useState(false);
-  const scrollRef = useRef<HTMLDivElement>(null);
+
+  // SCROLL REFS
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
   const scrollAnchorRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => setMounted(true), []);
@@ -240,12 +241,24 @@ export default function ChatWindow({ onNewMessage }: ChatWindowProps) {
   const hasMessages = activeConv && activeConv.messages.length > 0;
   const currentMode = MODES.find((m) => m.id === mode) || MODES[0];
 
-  // Auto-scroll logic
-  useEffect(() => {
+  // --- REFINED AUTO-SCROLL LOGIC ---
+  const scrollToBottom = useCallback(() => {
     if (scrollAnchorRef.current) {
-      scrollAnchorRef.current.scrollIntoView({ behavior: "smooth" });
+      scrollAnchorRef.current.scrollIntoView({
+        behavior: "smooth",
+        block: "end",
+      });
     }
-  }, [activeConv?.messages, isTyping]);
+  }, []);
+
+  // Trigger scroll on message length change OR typing state change
+  useEffect(() => {
+    // Small timeout ensures the DOM has rendered the new message bubble before scrolling
+    const timer = setTimeout(() => {
+      scrollToBottom();
+    }, 100);
+    return () => clearTimeout(timer);
+  }, [activeConv?.messages.length, isTyping, scrollToBottom]);
 
   const handleDownloadPDF = () => {
     if (!hasMessages) return;
@@ -324,17 +337,14 @@ export default function ChatWindow({ onNewMessage }: ChatWindowProps) {
     }
   };
 
-  // Restoring Edit Actions
   const startEditing = (id: string, content: string) => {
     setEditingMessageId(id);
     setEditBuffer(content);
   };
-
   const cancelEditing = () => {
     setEditingMessageId(null);
     setEditBuffer("");
   };
-
   const saveEdit = (id: string) => {
     if (editBuffer.trim()) {
       handleSend(editBuffer);
@@ -511,8 +521,8 @@ export default function ChatWindow({ onNewMessage }: ChatWindowProps) {
       </header>
 
       <div
-        ref={scrollRef}
-        className="flex-1 overflow-y-auto px-4 py-6 custom-scrollbar relative z-10"
+        ref={scrollContainerRef}
+        className="flex-1 overflow-y-auto px-4 py-6 custom-scrollbar relative z-10 scroll-smooth"
       >
         <AnimatePresence mode="wait">
           {!hasMessages ? (
@@ -569,7 +579,6 @@ export default function ChatWindow({ onNewMessage }: ChatWindowProps) {
                     sources = parsed.sources || [];
                   } catch (e) {}
                 }
-
                 const isEditing = editingMessageId === msg.id;
 
                 return (
@@ -674,7 +683,7 @@ export default function ChatWindow({ onNewMessage }: ChatWindowProps) {
                 );
               })}
               {isTyping && <ThinkingBubble modeIcon={currentMode.icon} />}
-              <div ref={scrollAnchorRef} className="h-4" />
+              <div ref={scrollAnchorRef} className="h-2 w-full" />
             </div>
           )}
         </AnimatePresence>

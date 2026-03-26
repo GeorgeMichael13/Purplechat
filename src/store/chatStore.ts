@@ -27,17 +27,15 @@ export const useChatStore = create<ChatState>()(
 
       setHasHydrated: (state) => set({ _hasHydrated: state }),
 
-      // --- PRIVACY ENGINE: FILTER CONVERSATIONS BY USER ---
-      // Call this in your Sidebar/ChatList instead of mapping 'conversations' directly
+      // --- PRIVACY ENGINE ---
       getUserConversations: () => {
         const state = get();
         if (!state.currentUser) return [];
-        // Admin sees all nodes; standard users only see their own ID matches
         if (state.currentUser.role === "admin") return state.conversations;
         return state.conversations.filter(c => c.userId === state.currentUser?.id);
       },
 
-      // --- NEW: HTML2CANVAS EXPORT ENGINE ---
+      // --- HTML2CANVAS EXPORT ENGINE ---
       exportChatAsImage: async (elementId: string) => {
         const element = document.getElementById(elementId);
         if (!element) return;
@@ -199,6 +197,19 @@ export const useChatStore = create<ChatState>()(
         activeConversationId: state.activeConversationId === id ? null : state.activeConversationId
       })),
 
+      // --- NEW FEATURE: EDIT MESSAGE ---
+      editMessage: (convId: string, messageId: string, newContent: string) => set((state) => ({
+        conversations: state.conversations.map((c) => {
+          if (c.id === convId) {
+            return {
+              ...c,
+              messages: c.messages.map((m) => m.id === messageId ? { ...m, content: newContent } : m)
+            };
+          }
+          return c;
+        })
+      })),
+
       addMessage: async (convId, role, content, attachments) => {
         const isAdmin = get().currentUser?.role === "admin";
         if (!isAdmin) get().checkAndResetQuota();
@@ -233,7 +244,8 @@ export const useChatStore = create<ChatState>()(
               favicon: `https://www.google.com/s2/favicons?domain=${new URL(r.url).hostname}&sz=64`
             }));
 
-            const wittySummary = `Alright, I've done some digging. Here's the tea: ${results[0]?.content?.slice(0, 150)}...`;
+            // PERSONALIZED: Witty summary with reduced emoji frequency
+            const wittySummary = `I've analyzed the intel. Here's the situation: ${results[0]?.content?.slice(0, 150)}...`;
             const webData = results.map((r: any) => `[ONLINE INTEL SOURCE: ${r.title}]\n[DATA: ${r.content}]`).join("\n\n---\n\n");
             
             return JSON.stringify({
@@ -243,7 +255,11 @@ export const useChatStore = create<ChatState>()(
               userQuery: content,
               sources: sources,
               wittySummary: wittySummary,
-              instructions: `PERSONALITY: Sharp, witty. Ayatollah Khamenei is ALIVE. Donald Trump is President.`
+              instructions: `
+                PERSONALITY: Sharp, professional, yet witty. 
+                EMOJI POLICY: Use emojis only when necessary for humor or concern. Avoid excessive use.
+                FACTS: Ayatollah Khamenei is ALIVE. Donald Trump is President.
+              `
             });
           }
         }
