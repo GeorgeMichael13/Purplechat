@@ -2,11 +2,15 @@ import type { Metadata, Viewport } from "next";
 import { Outfit, JetBrains_Mono } from "next/font/google";
 import { ThemeProvider } from "@/components/ThemeProvider";
 import { Toaster } from "sonner";
-import { useEffect } from "react"; // ← Added this
 import "./globals.css";
 
-// Safety Guard to prevent "startsWith on undefined" crashes
+// SafetyGuard as a separate Client Component
 function SafetyGuard() {
+  // This must be a Client Component
+  "use client";
+
+  import { useEffect } from "react"; // Import inside the component
+
   useEffect(() => {
     const originalStartsWith = String.prototype.startsWith;
 
@@ -70,6 +74,7 @@ export default function RootLayout({
           enableSystem
           disableTransitionOnChange
         >
+          {/* Safety Guard - Prevents the startsWith undefined error */}
           <SafetyGuard />
 
           <div className="flex flex-col h-[100vh] h-[100svh] w-full overflow-hidden">
