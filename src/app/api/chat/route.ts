@@ -5,8 +5,8 @@ export const dynamic = 'force-dynamic';
 
 const MAX_CHAR_LIMIT = 8000;
 
-function truncate(text: string, limit: number) {
-  if (!text) return "";
+function truncate(text: string | undefined, limit: number): string {
+  if (!text || typeof text !== "string") return "";
   return text.length > limit ? text.slice(0, limit) + "... [Content truncated]" : text;
 }
 
@@ -21,7 +21,7 @@ export async function POST(req: Request) {
       );
     }
 
-    // --- 1. PERSONA & DATE LOCK (UPGRADED WITH GEN Z VIBES & EMOJIS) ---
+    // --- 1. PERSONA & DATE LOCK ---
     const CURRENT_DATE = "March 26, 2026";
     let systemPrompt = `You are PurpleChat, a witty, sharp, and high-energy AI companion. 
     TODAY IS ${CURRENT_DATE}. 
@@ -37,7 +37,7 @@ export async function POST(req: Request) {
     const lastMessageRaw = messages[messages.length - 1];
 
     // --- 2. NEURAL INJECTION HANDLING ---
-    if (typeof lastMessageRaw.content === "string" && lastMessageRaw.content.includes("NEURAL_SEARCH_INJECTION")) {
+    if (typeof lastMessageRaw?.content === "string" && lastMessageRaw.content.includes("NEURAL_SEARCH_INJECTION")) {
       try {
         const injection = JSON.parse(lastMessageRaw.content);
         const webContext = injection.context;
@@ -52,27 +52,33 @@ export async function POST(req: Request) {
       }
     }
 
-    // --- 3. ATTACHMENT & FILE LOGIC (Old Features Maintained) ---
+    // --- 3. ATTACHMENT & FILE LOGIC ---
     let fileContext = "";
     const lastMessage = lastMessageRaw; 
-    const imageAttachments = lastMessage.attachments?.filter((a: any) => a.isImage) || [];
+    const imageAttachments = lastMessage?.attachments?.filter((a: any) => a?.isImage) || [];
 
-    if (lastMessage.attachments && lastMessage.attachments.length > 0) {
+    if (lastMessage?.attachments && lastMessage.attachments.length > 0) {
       let parsePdf;
       try {
         const pdfModule: any = await import("pdf-parse");
         parsePdf = pdfModule.default || pdfModule;
-      } catch (importErr) { console.error("PDF Import Error:", importErr); }
+      } catch (importErr) {
+        console.error("PDF Import Error:", importErr);
+      }
 
       for (const file of lastMessage.attachments) {
+        if (!file) continue;
+
         if (file.type === "application/pdf" && file.base64 && parsePdf) {
           try {
             const buffer = Buffer.from(file.base64, "base64");
             const data = await parsePdf(buffer);
-            fileContext += `\n[File: ${file.name}]\n${truncate(data.text, MAX_CHAR_LIMIT)}\n`;
-          } catch (pdfErr) { console.error("PDF Parsing Error:", pdfErr); }
+            fileContext += `\n[File: ${file.name || "Untitled"}]\n${truncate(data?.text, MAX_CHAR_LIMIT)}\n`;
+          } catch (pdfErr) {
+            console.error("PDF Parsing Error:", pdfErr);
+          }
         } else if (file.extractedText && !file.isImage) {
-          fileContext += `\n[File: ${file.name}]\n${truncate(file.extractedText, MAX_CHAR_LIMIT)}\n`;
+          fileContext += `\n[File: ${file.name || "Untitled"}]\n${truncate(file.extractedText, MAX_CHAR_LIMIT)}\n`;
         }
       }
     }
@@ -83,22 +89,46 @@ export async function POST(req: Request) {
       const isLast = index === recentMessages.length - 1;
       const role = m.role === "model" || m.role === "assistant" ? "assistant" : "user";
 
+      // === SAFER IMAGE HANDLING (This was causing the startsWith error) ===
       if (isLast && imageAttachments.length > 0) {
         const contentArray: any[] = [{ 
           type: "text", 
-          text: truncate(fileContext ? `FILES:\n${fileContext}\n\nQ: ${m.content || "Analyze image"}` : (m.content || "Analyze image"), MAX_CHAR_LIMIT) 
+          text: truncate(
+            fileContext 
+              ? `FILES:\n${fileContext}\n\nQ: ${m.content || "Analyze image"}` 
+              : (m.content || "Analyze image"), 
+            MAX_CHAR_LIMIT
+          ) 
         }];
+
+        // Safe image URL processing
         imageAttachments.forEach((img: any) => {
-          contentArray.push({ type: "image_url", image_url: { url: img.data.startsWith('data:') ? img.data : `data:${img.type};base64,${img.data}` } });
+          const imageData = img?.data;
+          if (!imageData) return;
+
+          const url = typeof imageData === "string" && imageData.startsWith("data:")
+            ? imageData
+            : `data:${img?.type || "image/jpeg"};base64,${imageData}`;
+
+          contentArray.push({ 
+            type: "image_url", 
+            image_url: { url } 
+          });
         });
+
         return { role, content: contentArray };
       }
 
+      // Text-only message
       let textContent = m.content;
       if (isLast && fileContext) {
         textContent = `FILES:\n${fileContext}\n\nUSER QUESTION: ${m.content}`;
       }
-      return { role, content: truncate(textContent, MAX_CHAR_LIMIT) };
+
+      return { 
+        role, 
+        content: truncate(textContent, MAX_CHAR_LIMIT) 
+      };
     });
 
     processedMessages.unshift({ role: "system", content: systemPrompt });
@@ -108,17 +138,17 @@ export async function POST(req: Request) {
       baseURL: "https://api.groq.com/openai/v1" 
     });
 
-    // --- 4. STEP 1: INITIAL GENERATION ---
+    // --- 4. INITIAL GENERATION ---
     const response = await groq.chat.completions.create({
       messages: processedMessages,
       model: imageAttachments.length > 0 ? "llama-3.2-11b-vision-preview" : "llama-3.3-70b-versatile",
       max_tokens: 1024,
-      temperature: 0.85, // Bumped slightly for better emoji usage and creative wit
+      temperature: 0.85,
     });
 
-    let aiText = response.choices[0].message.content || "";
+    let aiText = response.choices[0]?.message?.content || "";
 
-    // --- 5. STEP 2: THE SELF-CORRECTION STEP (Anti-Hallucination) ---
+    // --- 5. SELF-CORRECTION STEP ---
     const redFlags = ["Joe Biden", "2023", "knowledge cutoff", "Khamenei is dead", "Khamenei was terminated", "database"];
     const hasHallucination = redFlags.some(flag => aiText.toLowerCase().includes(flag.toLowerCase()));
 
@@ -143,7 +173,7 @@ export async function POST(req: Request) {
         temperature: 0.5, 
       });
       
-      aiText = correctedResponse.choices[0].message.content || aiText;
+      aiText = correctedResponse.choices[0]?.message?.content || aiText;
     }
 
     return NextResponse.json({ 
@@ -152,7 +182,10 @@ export async function POST(req: Request) {
     });
 
   } catch (error: any) {
-    console.error("❌ API Error:", error.message);
-    return NextResponse.json({ error: "SERVER_ERROR", message: error.message }, { status: 503 });
+    console.error("❌ API Error:", error.message || error);
+    return NextResponse.json({ 
+      error: "SERVER_ERROR", 
+      message: error.message || "Unknown error occurred" 
+    }, { status: 503 });
   }
 }

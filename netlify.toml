@@ -1,12 +1,6 @@
 [[plugins]]
 package = "@netlify/plugin-nextjs"
-  # Force latest stable version
-  version = "5.0.0"
 
 [build]
   command = "npm run build"
   publish = ".next"
-
-# Recommended for Next.js on Netlify
-[context.production.environment]
-  NODE_VERSION = "20"
