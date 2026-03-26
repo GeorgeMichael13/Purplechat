@@ -4,18 +4,16 @@ import { ThemeProvider } from "@/components/ThemeProvider";
 import { Toaster } from "sonner";
 import "./globals.css";
 
-// SafetyGuard as a separate Client Component
+// ====================== SAFETY GUARD ======================
+("use client");
+import { useEffect } from "react";
+
 function SafetyGuard() {
-  // This must be a Client Component
-  "use client";
-
-  import { useEffect } from "react"; // Import inside the component
-
   useEffect(() => {
     const originalStartsWith = String.prototype.startsWith;
 
     String.prototype.startsWith = function (search: any) {
-      if (this == null || this === undefined || this === "") {
+      if (typeof this !== "string") {
         console.warn("🚨 Prevented startsWith() call on undefined/null value");
         return false;
       }
@@ -29,6 +27,7 @@ function SafetyGuard() {
 
   return null;
 }
+// ===========================================================
 
 const outfit = Outfit({
   subsets: ["latin"],
