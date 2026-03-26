@@ -33,13 +33,13 @@ import {
   Loader2,
 } from "lucide-react";
 import { useState, useRef, useEffect, useCallback } from "react";
-import { motion, AnimatePresence } from " fomer-motion";
 import { cn } from "@/lib/utils";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { useTheme } from "next-themes";
 import { toast } from "sonner";
 import ChatInput from "./ChatInput";
+import { motion, AnimatePresence } from "framer-motion";
 
 // --- NEW SUB-COMPONENT: NEURAL SOURCES ---
 const NeuralSources = ({ sources }: { sources: any[] }) => {
