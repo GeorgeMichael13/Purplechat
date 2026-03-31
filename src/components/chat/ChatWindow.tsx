@@ -31,7 +31,7 @@ import {
   ExternalLink,
   Search,
   Loader2,
-  Wrench, // Added for repair icon
+  Wrench,
 } from "lucide-react";
 import { useState, useRef, useEffect, useCallback } from "react";
 import { cn } from "@/lib/utils";
@@ -41,6 +41,53 @@ import { useTheme } from "next-themes";
 import { toast } from "sonner";
 import ChatInput from "./ChatInput";
 import { motion, AnimatePresence } from "framer-motion";
+
+// --- NEW SUB-COMPONENT: NEURAL CODE BLOCK WITH COPY ---
+const CodeBlock = ({
+  language,
+  value,
+}: {
+  language: string;
+  value: string;
+}) => {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(value);
+    setCopied(true);
+    toast.success("Code copied to clipboard");
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  return (
+    <div className="relative group my-4 rounded-xl overflow-hidden border border-slate-200 dark:border-white/10 shadow-sm">
+      <div className="flex items-center justify-between px-4 py-1.5 bg-slate-100 dark:bg-[#0f172a] border-b border-slate-200 dark:border-white/10">
+        <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400">
+          {language || "code"}
+        </span>
+        <button
+          onClick={handleCopy}
+          className="flex items-center gap-1.5 text-[11px] font-medium text-slate-500 hover:text-violet-500 transition-colors"
+        >
+          {copied ? (
+            <>
+              <Check size={12} className="text-green-500" /> Copied
+            </>
+          ) : (
+            <>
+              <Copy size={12} /> Copy Code
+            </>
+          )}
+        </button>
+      </div>
+      <pre className="p-4 bg-slate-50 dark:bg-black/40 overflow-x-auto custom-scrollbar">
+        <code className="text-sm font-mono leading-relaxed text-slate-800 dark:text-slate-300">
+          {value}
+        </code>
+      </pre>
+    </div>
+  );
+};
 
 // --- NEW SUB-COMPONENT: NEURAL SOURCES ---
 const NeuralSources = ({ sources }: { sources: any[] }) => {
@@ -82,7 +129,7 @@ const NeuralSources = ({ sources }: { sources: any[] }) => {
   );
 };
 
-// --- NEW SUB-COMPONENT: THINKING BUBBLE WITH DYNAMIC TEXT ---
+// --- NEW SUB-COMPONENT: THINKING BUBBLE ---
 const ThinkingBubble = ({ modeIcon: ModeIcon }: { modeIcon: any }) => {
   const [statusIdx, setStatusIdx] = useState(0);
   const statuses = [
@@ -195,21 +242,18 @@ const SUGGESTIONS = [
   },
 ];
 
-interface ChatWindowProps {
-  onNewMessage?: (text: string) => void;
-}
-
 export default function ChatWindow({ onNewMessage }: ChatWindowProps) {
   const { setTheme, resolvedTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
   const [showModeMenu, setShowModeMenu] = useState(false);
   const [showActionMenu, setShowActionMenu] = useState(false);
-
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [editBuffer, setEditBuffer] = useState("");
-
   const [isSpeaking, setIsSpeaking] = useState(false);
-  const [ttsEnabled, setTtsEnabled] = useState(true);
+
+  // --- FEATURE: TTS DISABLED BY DEFAULT ---
+  const [ttsEnabled, setTtsEnabled] = useState(false);
+
   const synth = typeof window !== "undefined" ? window.speechSynthesis : null;
 
   const {
@@ -232,7 +276,6 @@ export default function ChatWindow({ onNewMessage }: ChatWindowProps) {
   const [input, setInput] = useState("");
   const [isTyping, setIsTyping] = useState(false);
 
-  // SCROLL REFS
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const scrollAnchorRef = useRef<HTMLDivElement>(null);
 
@@ -242,7 +285,6 @@ export default function ChatWindow({ onNewMessage }: ChatWindowProps) {
   const hasMessages = activeConv && activeConv.messages.length > 0;
   const currentMode = MODES.find((m) => m.id === mode) || MODES[0];
 
-  // --- REFINED AUTO-SCROLL LOGIC ---
   const scrollToBottom = useCallback(() => {
     if (scrollAnchorRef.current) {
       scrollAnchorRef.current.scrollIntoView({
@@ -252,11 +294,8 @@ export default function ChatWindow({ onNewMessage }: ChatWindowProps) {
     }
   }, []);
 
-  // Trigger scroll on message length change OR typing state change
   useEffect(() => {
-    const timer = setTimeout(() => {
-      scrollToBottom();
-    }, 100);
+    const timer = setTimeout(() => scrollToBottom(), 100);
     return () => clearTimeout(timer);
   }, [activeConv?.messages.length, isTyping, scrollToBottom]);
 
@@ -264,11 +303,9 @@ export default function ChatWindow({ onNewMessage }: ChatWindowProps) {
     if (!hasMessages) return;
     window.print();
   };
-
   const handleExportJSON = () => {
     if (!hasMessages) return;
-    const dataToExport = activeConv.messages;
-    const blob = new Blob([JSON.stringify(dataToExport, null, 2)], {
+    const blob = new Blob([JSON.stringify(activeConv.messages, null, 2)], {
       type: "application/json",
     });
     const url = URL.createObjectURL(blob);
@@ -304,13 +341,10 @@ export default function ChatWindow({ onNewMessage }: ChatWindowProps) {
     const text = content || input;
     if (!text.trim() && (!attachments || attachments.length === 0)) return;
     if (promptsLeft <= 0) return;
-
     let currentId = activeConversationId || createNewConversation();
     setInput("");
     setIsTyping(true);
-
     const injection = await addMessage(currentId, "user", text, attachments);
-
     try {
       const res = await fetch("/api/chat", {
         method: "POST",
@@ -325,7 +359,6 @@ export default function ChatWindow({ onNewMessage }: ChatWindowProps) {
           ],
         }),
       });
-
       const data = await res.json();
       await addMessage(currentId, "assistant", data.text);
       if (onNewMessage) onNewMessage(data.text);
@@ -351,8 +384,6 @@ export default function ChatWindow({ onNewMessage }: ChatWindowProps) {
       setEditingMessageId(null);
     }
   };
-
-  // --- REPAIR FUNCTION ---
   const handleSystemRepair = () => {
     toast.loading("Repairing neural links...");
     setTimeout(() => {
@@ -420,18 +451,15 @@ export default function ChatWindow({ onNewMessage }: ChatWindowProps) {
           <span className="text-sm font-medium">Clear Messages</span>
         )}
       </button>
-
-      {/* REPAIR BUTTON (Mobile Only) */}
       {isMobile && (
         <button
           onClick={handleSystemRepair}
           className="p-2 text-emerald-500 hover:bg-emerald-500/10 rounded-lg flex items-center gap-3 mt-1"
         >
-          <Wrench size={18} />
+          <Wrench size={18} />{" "}
           <span className="text-sm font-medium">Repair Neural Link</span>
         </button>
       )}
-
       {isMobile && (
         <button
           onClick={() => logout()}
@@ -506,7 +534,6 @@ export default function ChatWindow({ onNewMessage }: ChatWindowProps) {
         <div className="hidden lg:flex items-center">
           <ActionList />
           <div className="w-[1px] h-4 bg-slate-200 dark:bg-white/10 mx-2" />
-          {/* Repair Button (Desktop Icon) */}
           <button
             onClick={handleSystemRepair}
             title="Repair System"
@@ -596,15 +623,12 @@ export default function ChatWindow({ onNewMessage }: ChatWindowProps) {
           ) : (
             <div className="space-y-8 max-w-4xl mx-auto">
               {activeConv.messages.map((msg) => {
-                // DEFENSIVE RENDERING CHECK
                 const isInjection =
                   msg.content &&
                   typeof msg.content === "string" &&
                   msg.content.startsWith('{"type":"NEURAL_SEARCH_INJECTION"');
-
                 let displayContent = msg.content || "";
                 let sources = [];
-
                 if (isInjection) {
                   try {
                     const parsed = JSON.parse(msg.content);
@@ -680,7 +704,38 @@ export default function ChatWindow({ onNewMessage }: ChatWindowProps) {
                           </div>
                         ) : (
                           <>
-                            <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                            <ReactMarkdown
+                              remarkPlugins={[remarkGfm]}
+                              components={{
+                                code({
+                                  node,
+                                  inline,
+                                  className,
+                                  children,
+                                  ...props
+                                }: any) {
+                                  const match = /language-(\w+)/.exec(
+                                    className || "",
+                                  );
+                                  return !inline ? (
+                                    <CodeBlock
+                                      language={match ? match[1] : ""}
+                                      value={String(children).replace(
+                                        /\n$/,
+                                        "",
+                                      )}
+                                    />
+                                  ) : (
+                                    <code
+                                      className="bg-slate-100 dark:bg-white/10 px-1.5 py-0.5 rounded text-violet-500 font-mono text-xs"
+                                      {...props}
+                                    >
+                                      {children}
+                                    </code>
+                                  );
+                                },
+                              }}
+                            >
                               {displayContent}
                             </ReactMarkdown>
                             {sources.length > 0 && (
