@@ -71,6 +71,7 @@ export default function Home() {
     [],
   );
 
+  // Prevent hydration mismatch
   if (!mounted || !_hasHydrated)
     return <div className="h-screen w-full bg-slate-950" />;
 

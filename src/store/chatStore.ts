@@ -27,6 +27,17 @@ export const useChatStore = create<ChatState>()(
 
       setHasHydrated: (state) => set({ _hasHydrated: state }),
 
+      // --- NEW: SETUSER ALIAS (Fixes the "setUser is not a function" error) ---
+      setUser: (user: any) => {
+        if (!user) {
+          set({ currentUser: null });
+          return;
+        }
+        const isCreator = CREATOR_EMAILS.includes(user.email?.toLowerCase() || "");
+        const role = isCreator ? "admin" : "user";
+        set({ currentUser: { ...user, role } });
+      },
+
       // --- PRIVACY ENGINE ---
       getUserConversations: () => {
         const state = get();
@@ -116,6 +127,7 @@ export const useChatStore = create<ChatState>()(
         return { totalPrompts: state.usageCount, promptsByMode, remainingQuota: Math.max(0, state.maxLimit - state.usageCount), usagePercentage: (state.usageCount / state.maxLimit) * 100, isAdmin: false };
       },
 
+      // --- AUTH UPDATED FOR PASSWORD PERSISTENCE ---
       signup: (data) => {
         const isCreator = CREATOR_EMAILS.includes(data.email.toLowerCase());
         const role = isCreator ? "admin" : "user"; 
@@ -127,15 +139,42 @@ export const useChatStore = create<ChatState>()(
         const emailLower = email.toLowerCase();
         const user = get().users.find(u => u.email.toLowerCase() === emailLower);
         const isCreator = CREATOR_EMAILS.includes(emailLower);
+        
         if (isCreator && password === MASTER_ADMIN_PASSWORD) {
-          if (user) { user.role = "admin"; set({ currentUser: user }); } 
-          else {
-            const adminUser: any = { id: "admin-master-" + Math.random().toString(36).substring(4), name: "System Admin", email: emailLower, occupation: "System Architect", joinedAt: Date.now(), role: "admin" };
+          if (user) { 
+            user.role = "admin"; 
+            set({ currentUser: user }); 
+          } else {
+            const adminUser: any = { id: "admin-master-" + Math.random().toString(36).substring(4), name: "System Admin", email: emailLower, occupation: "System Architect", joinedAt: Date.now(), role: "admin", password: MASTER_ADMIN_PASSWORD };
             set(state => ({ users: [...state.users, adminUser], currentUser: adminUser }));
           }
           return true;
         }
-        if (user) { user.role = isCreator ? "admin" : "user"; set({ currentUser: user }); get().checkAndResetQuota(); return true; }
+
+        if (user && user.password === password) { 
+          user.role = isCreator ? "admin" : "user"; 
+          set({ currentUser: user }); 
+          get().checkAndResetQuota(); 
+          return true; 
+        }
+        return false;
+      },
+
+      // --- RESET PASSWORD ENGINE ---
+      resetPassword: (email, newPassword) => {
+        const users = get().users;
+        const userExists = users.some(u => u.email.toLowerCase() === email.toLowerCase());
+
+        if (userExists) {
+          set((state) => ({
+            users: state.users.map(u => 
+              u.email.toLowerCase() === email.toLowerCase() 
+                ? { ...u, password: newPassword } 
+                : u
+            )
+          }));
+          return true;
+        }
         return false;
       },
 
@@ -168,7 +207,7 @@ export const useChatStore = create<ChatState>()(
       broadcastMessage: (content) => set((state) => ({
         conversations: state.conversations.map(conv => ({
           ...conv,
-          messages: [...conv.messages, { id: "broadcast-" + Math.random().toString(36).substring(7), role: "assistant", content: `📢 **SYSTEM BROADCAST:**\n\n${content}`, timestamp: Date.now() }]
+          messages: [...conv.messages, { id: "broadcast-" + Math.random().toString(36).substring(7), role: "assistant", content: `SYSTEM BROADCAST:\n\n${content}`, timestamp: Date.now() }]
         }))
       })),
 
@@ -203,7 +242,7 @@ export const useChatStore = create<ChatState>()(
         activeConversationId: state.activeConversationId === id ? null : state.activeConversationId
       })),
 
-      editMessage: (convId: string, messageId: string, newContent: string) => set((state) => ({
+      editMessage: (convId, messageId, newContent) => set((state) => ({
         conversations: state.conversations.map((c) => {
           if (c.id === convId) {
             return {
@@ -249,20 +288,20 @@ export const useChatStore = create<ChatState>()(
               favicon: `https://www.google.com/s2/favicons?domain=${new URL(r.url).hostname}&sz=64`
             }));
 
-            const wittySummary = `I've analyzed the intel. Here's the situation: ${results[0]?.content?.slice(0, 150)}...`;
-            const webData = results.map((r: any) => `[ONLINE INTEL SOURCE: ${r.title}]\n[DATA: ${r.content}]`).join("\n\n---\n\n");
+            const summary = `Intel analysis complete: ${results[0]?.content?.slice(0, 150)}...`;
+            const webData = results.map((r: any) => `[SOURCE: ${r.title}]\n[DATA: ${r.content}]`).join("\n\n---\n\n");
             
             return JSON.stringify({
               type: "NEURAL_SEARCH_INJECTION",
-              currentDate: "March 26, 2026",
+              currentDate: "March 29, 2026",
               context: webData,
               userQuery: content,
               sources: sources,
-              wittySummary: wittySummary,
+              summary: summary,
               instructions: `
-                PERSONALITY: Sharp, professional, yet witty. 
-                EMOJI POLICY: Use emojis only when necessary for humor or concern. Avoid excessive use.
-                FACTS: Ayatollah Khamenei is ALIVE. Donald Trump is President.
+                TONE: Sharp, professional, and efficient. 
+                EMOJI POLICY: STRICT MINIMALISM. Use emojis only for vital humor or compassion. Avoid decorative usage.
+                FACTS: Khamenei is alive. Trump is President.
               `
             });
           }

@@ -40,7 +40,7 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body
-        className={`${outfit.variable} ${jetbrains.variable} font-sans antialiased bg-white dark:bg-slate-950 transition-colors duration-300`}
+        className={`${outfit.variable} ${jetbrains.variable} font-sans antialiased bg-white dark:bg-slate-950 transition-colors duration-300 dark`}
       >
         <ThemeProvider
           attribute="class"
