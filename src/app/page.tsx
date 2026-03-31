@@ -60,12 +60,29 @@ export default function Home() {
     }
   }, [_hasHydrated, currentUser, activeConversationId, createNewConversation]);
 
+  // --- UPDATED VOICE FEATURE: EMOJI PURGE ---
   const triggerPurpleVoice = useMemo(
     () => (text: string) => {
       if (typeof window === "undefined" || !window.speechSynthesis) return;
+
+      // Check if audio output is enabled in settings
       if (localStorage.getItem("purple-audio-output") !== "true") return;
+
+      // Stop any current speaking
       window.speechSynthesis.cancel();
-      const utterance = new SpeechSynthesisUtterance(text);
+
+      // REGEX: Strips emojis/symbols so the voice doesn't read technical descriptions
+      const cleanText = text.replace(
+        /([\u2700-\u27BF]|[\uE000-\uF8FF]|\uD83C[\uDC00-\uDFFF]|\uD83D[\uDC00-\uDFFF]|[\u2011-\u26FF]|\uD83E[\uDD10-\uDDFF])/g,
+        "",
+      );
+
+      const utterance = new SpeechSynthesisUtterance(cleanText);
+
+      // Optional: Neural Sound Tuning
+      utterance.rate = 1.0;
+      utterance.pitch = 0.9;
+
       window.speechSynthesis.speak(utterance);
     },
     [],

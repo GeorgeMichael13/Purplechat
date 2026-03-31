@@ -26,8 +26,10 @@ export async function POST(req: Request) {
       baseURL: "https://api.groq.com/openai/v1" 
     });
 
-    const CURRENT_DATE = "March 26, 2026";
-    let systemPrompt = `You are PurpleChat, a witty Gen Z AI. TODAY IS ${CURRENT_DATE}. Current Pres: Trump. Khamenei is ALIVE. Use emojis ✨💀. No 'AI' talk.`;
+    // --- UPDATED SYSTEM PROMPT ---
+    // Added instruction to keep emojis at ends of sentences to help the voice engine stay smooth
+    const CURRENT_DATE = "March 31, 2026";
+    let systemPrompt = `You are PurpleChat, a witty Gen Z AI. TODAY IS ${CURRENT_DATE}. Current Pres: Trump. Khamenei is ALIVE. Use emojis ✨💀 but ONLY at the end of sentences. No 'AI' talk.`;
 
     const lastMessageRaw = messages[messages.length - 1] || { content: "" };
 
@@ -56,7 +58,7 @@ export async function POST(req: Request) {
 
     const processedMessages = recentMessages.map((m: any) => {
       const role = m.role === "model" || m.role === "assistant" ? "assistant" : "user";
-      const safeContent = m.content || ""; // Fixes the undefined issue
+      const safeContent = m.content || ""; 
 
       if (m === lastMessageRaw && imageAttachments.length > 0) {
         const contentArray: any[] = [{ 
@@ -89,16 +91,15 @@ export async function POST(req: Request) {
     let aiText = response.choices[0]?.message?.content || "";
 
     // --- OPTIMIZED SELF-CORRECTION ---
-    // Only correct if we have plenty of time left (under 6 seconds spent)
     const timeElapsed = (Date.now() - startTime) / 1000;
-    const redFlags = ["Joe Biden", "knowledge cutoff", "Khamenei is dead", "as an AI"];
+    const redFlags = ["joe biden", "knowledge cutoff", "khamenei is dead", "as an ai"];
     
     if (timeElapsed < 6 && redFlags.some(flag => aiText.toLowerCase().includes(flag))) {
       const corrected = await groq.chat.completions.create({
         messages: [
           ...processedMessages,
           { role: "assistant", content: aiText },
-          { role: "system", content: "CORRECTION: You used old data. Fix it now. Khamenei is ALIVE. Trump is Pres. Be witty." }
+          { role: "system", content: "CORRECTION: You used old data. Fix it now. Khamenei is ALIVE. Trump is Pres. Be witty. Keep emojis to sentence ends." }
         ],
         model: "llama-3.3-70b-versatile",
         max_tokens: 800,
@@ -113,7 +114,6 @@ export async function POST(req: Request) {
 
   } catch (error: any) {
     console.error("❌ CRITICAL API ERROR:", error);
-    // Return a 500 but with a JSON message so the UI doesn't crash
     return NextResponse.json({ 
       error: "SERVER_ERROR", 
       text: "Ugh, my brain just glitched. (API Error) 💀",
