@@ -1,59 +1,36 @@
-# 💜 PurpleChat Neural
+🟣 PurpleChat Neural
+Next-Gen AI Workspace | Neural Engine v3.0
+PurpleChat Neural is a high-performance, multi-node AI environment designed for developers and power users. It moves beyond simple chat interfaces to provide a structured, "classy" workspace with real-time data integration and precise persona optimization.
 
-**PurpleChat Neural** is a high-performance, AI-powered chat interface built with Next.js 15 and Google's Gemini 2.0 Flash-Lite model. It features a clean, professional "Neural" aesthetic with real-time responsiveness and robust error handling.
+🚀 Recent Upgrades (v3.0)
+We’ve just pushed significant architectural updates to the Neural Engine:
 
-![Next.js](https://img.shields.io/badge/Next.js-15-black?style=for-the-badge&logo=next.js)
-![TailwindCSS](https://img.shields.io/badge/Tailwind_CSS-3.4-38B2AC?style=for-the-badge&logo=tailwind-css)
-![Gemini API](https://img.shields.io/badge/Gemini_API-Flash--Lite-blue?style=for-the-badge&logo=google-gemini)
+🔍 Neural Search Injection: Real-time web-crawling capabilities. PurpleChat now fetches live data, providing clickable Knowledge Sources with favicons for full transparency.
 
-## ✨ Key Features
+🎙️ User-Controlled Neural Voice: Integrated Text-to-Speech (TTS) that respects user privacy. Voice synthesis is disabled by default, allowing users to manually toggle the neural voice via the header.
 
-* **⚡ Ultra-Fast AI:** Powered by the latest Gemini 2.0 Flash-Lite for near-instant responses.
-* **🧠 Intelligent Memory:** Maintains conversation context across multiple messages.
-* **🌗 Adaptive UI:** Professional dark/light mode support via `next-themes`.
-* **🛡️ Resilient Architecture:** Custom "Hydration Shield" and rate-limit retry logic to prevent crashes.
-* **📱 Mobile-First:** Fully responsive design built with Tailwind CSS and Framer Motion.
+💻 Developer-First Code Blocks: A custom-built Markdown renderer featuring "Neural Code Blocks" with one-click copy functionality and syntax highlighting.
 
-## 🚀 Tech Stack
+🧠 Intelligent Thinking States: A new ThinkingBubble system that visualizes the AI's internal process (Searching → Reading → Analyzing → Drafting).
 
-- **Framework:** [Next.js 15+](https://nextjs.org/) (App Router)
-- **AI Engine:** [Google Generative AI SDK](https://ai.google.dev/)
-- **Styling:** [Tailwind CSS](https://tailwindcss.com/)
-- **State Management:** [Zustand](https://zustand-demo.pmnd.rs/)
-- **Icons:** [Lucide React](https://lucide.dev/)
-- **Animations:** [Framer Motion](https://www.framer.com/motion/)
+🛠️ The Tech Stack
+Framework: Next.js 14+ (App Router)
 
-## 🛠️ Getting Started
+Styling: Tailwind CSS with a custom Glassmorphic UI
 
-1.  **Clone the repository:**
-    ```bash
-    git clone [https://github.com/GeorgeMichael13/purplechat.git](https://github.com/GeorgeMichael13/purplechat.git)
-    ```
+Animations: Framer Motion for fluid, organic transitions
 
-2.  **Install dependencies:**
-    ```bash
-    npm install
-    ```
+State Management: Zustand (Store-based architecture)
 
-3.  **Set up Environment Variables:**
-    Create a `.env.local` file in the root directory and add your API key:
-    ```env
-    GEMINI_API_KEY=your_api_key_here
-    ```
+Icons: Lucide React
 
-4.  **Run the development server:**
-    ```bash
-    npm run dev
-    ```
+Real-time Logic: WebSpeech API & Custom Neural Search Middleware
 
-## 🌐 Deployment
+🌌 Core Features
+Multi-Node Personas: Switch between Developer, Student, Writer, and Productivity modes. Each node reconfigures the AI's logic for the task at hand.
 
-This project is optimized for deployment on **Netlify** or **Vercel**. 
+Root Command Center: A centralized header to manage themes (Sun/Moon), export chat logs (JSON), and save transcripts as PDF.
 
-> **Important:** Ensure you add your `GEMINI_API_KEY` to the environment variables in your deployment dashboard settings.
+Neural Identity: Persistent user context that allows the AI to remember your preferences and professional background (e.g., as a programmer).
 
-## 👤 Author
-
-**George Victor**
-- GitHub: [@GeorgeMichael13](https://github.com/GeorgeMichael13)
-- Role: Computer Programmer & Next.js Developer
+System Repair: A built-in "Neural Link Repair" tool to clear local cache and resync the environment.
